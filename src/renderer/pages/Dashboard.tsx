@@ -158,7 +158,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                 <p className="font-bold text-zinc-200 truncate max-w-[180px]">
                   {stats.activePipeline.lastPublishedKeyword ? (
                     stats.activePipeline.lastPublishedUrl ? (
-                      <a href={stats.activePipeline.lastPublishedUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline inline-flex items-center">
+                      <a 
+                        href="#" 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (stats.activePipeline.lastPublishedUrl) {
+                            (window as any).api.openExternal(stats.activePipeline.lastPublishedUrl);
+                          }
+                        }}
+                        className="text-indigo-400 hover:underline inline-flex items-center"
+                      >
                         {stats.activePipeline.lastPublishedKeyword}
                         <ExternalLink className="h-3 w-3 ml-1" />
                       </a>

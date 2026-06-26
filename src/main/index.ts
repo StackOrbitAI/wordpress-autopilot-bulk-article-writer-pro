@@ -62,102 +62,116 @@ function createWindow() {
   setupAutoUpdater(mainWindow);
 }
 
-// 1. Electron Lifecycle
-app.whenReady().then(async () => {
-  // Setup standard application menu to enable keyboard copy/paste/undo/redo shortcuts
-  const template: any[] = [
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'pasteandmatchstyle' },
-        { role: 'delete' },
-        { role: 'selectall' }
-      ]
-    },
-    {
-      label: 'View',
-      submenu: [
-        { role: 'reload' },
-        { role: 'forcereload' },
-        { role: 'toggledevtools' },
-        { type: 'separator' },
-        { role: 'resetzoom' },
-        { role: 'zoomin' },
-        { role: 'zoomout' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' }
-      ]
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        ...(process.platform === 'darwin' ? [
-          { type: 'separator' },
-          { role: 'front' },
-          { type: 'separator' },
-          { role: 'window' }
-        ] : [
-          { role: 'close' }
-        ])
-      ]
-    }
-  ];
+// 1. Electron Single Instance Lock & Lifecycle
+const gotTheLock = app.requestSingleInstanceLock();
 
-  const appMenu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(appMenu);
-
-  // Initialize Database
-  await initDatabase();
-
-  // Resume running tasks on startup
-  try {
-    const runningTasks = await dbAll(`SELECT id FROM tasks WHERE status = 'running'`);
-    for (const t of runningTasks) {
-      console.log(`[Startup] Resuming task ID ${t.id}...`);
-      // Start processing but do not block app init
-      queueManager.startTask(t.id).catch(err => {
-        console.error(`[Startup] Error resuming task ${t.id}:`, err);
-      });
-    }
-  } catch (err: any) {
-    console.error('[Startup] Failed to auto-resume running tasks:', err.message);
-  }
-
-  // Start Express API Server
-  await startExpressServer(4890, (siteData) => {
+if (!gotTheLock) {
+  console.warn('[Electron] Another instance is already running. Quitting.');
+  app.quit();
+} else {
+  app.on('second-instance', () => {
     if (mainWindow) {
-      mainWindow.webContents.send('wordpress:auth-success', siteData);
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
   });
 
-  // Start Task Scheduler
-  scheduler.start();
+  app.whenReady().then(async () => {
+    // Setup standard application menu to enable keyboard copy/paste/undo/redo shortcuts
+    const template: any[] = [
+      {
+        label: 'Edit',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'pasteandmatchstyle' },
+          { role: 'delete' },
+          { role: 'selectall' }
+        ]
+      },
+      {
+        label: 'View',
+        submenu: [
+          { role: 'reload' },
+          { role: 'forcereload' },
+          { role: 'toggledevtools' },
+          { type: 'separator' },
+          { role: 'resetzoom' },
+          { role: 'zoomin' },
+          { role: 'zoomout' },
+          { type: 'separator' },
+          { role: 'togglefullscreen' }
+        ]
+      },
+      {
+        label: 'Window',
+        submenu: [
+          { role: 'minimize' },
+          { role: 'zoom' },
+          ...(process.platform === 'darwin' ? [
+            { type: 'separator' },
+            { role: 'front' },
+            { type: 'separator' },
+            { role: 'window' }
+          ] : [
+            { role: 'close' }
+          ])
+        ]
+      }
+    ];
 
-  createWindow();
+    const appMenu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(appMenu);
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    // Initialize Database
+    await initDatabase();
+
+    // Resume running tasks on startup
+    try {
+      const runningTasks = await dbAll(`SELECT id FROM tasks WHERE status = 'running'`);
+      for (const t of runningTasks) {
+        console.log(`[Startup] Resuming task ID ${t.id}...`);
+        // Start processing but do not block app init
+        queueManager.startTask(t.id).catch(err => {
+          console.error(`[Startup] Error resuming task ${t.id}:`, err);
+        });
+      }
+    } catch (err: any) {
+      console.error('[Startup] Failed to auto-resume running tasks:', err.message);
+    }
+
+    // Start Express API Server
+    await startExpressServer(4890, (siteData) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('wordpress:auth-success', siteData);
+      }
+    });
+
+    // Start Task Scheduler
+    scheduler.start();
+
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
   });
-});
 
-app.on('window-all-closed', async () => {
-  // Stop scheduler and local Express server
-  scheduler.stop();
-  await stopExpressServer();
-  await closeDatabase();
+  app.on('window-all-closed', async () => {
+    // Stop scheduler and local Express server
+    scheduler.stop();
+    await stopExpressServer();
+    await closeDatabase();
 
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+}
 
 // 2. Register IPC Handlers
 // App Utilities

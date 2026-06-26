@@ -289,10 +289,25 @@ export function startExpressServer(port: number = 4890, onWordPressCallback?: (s
     if (serverInstance) {
       return resolve(port);
     }
-    serverInstance = app.listen(port, () => {
-      console.log(`[Express Server] Local API server listening on http://127.0.0.1:${port}`);
+    try {
+      const server = app.listen(port, () => {
+        console.log(`[Express Server] Local API server listening on http://127.0.0.1:${port}`);
+        serverInstance = server;
+        resolve(port);
+      });
+
+      server.on('error', (err: any) => {
+        console.error('[Express Server] Server error:', err.message);
+        if (err.code === 'EADDRINUSE') {
+          console.warn(`[Express Server] Port ${port} is already in use. Proceeding without starting a new server instance.`);
+          // If port is in use, we resolve successfully so the app doesn't crash.
+          resolve(port);
+        }
+      });
+    } catch (err: any) {
+      console.error('[Express Server] Exception during server listen:', err.message);
       resolve(port);
-    });
+    }
   });
 }
 

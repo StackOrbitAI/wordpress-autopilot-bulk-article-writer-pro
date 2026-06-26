@@ -251,9 +251,13 @@ const History: React.FC = () => {
                                 <Eye className="h-3.5 w-3.5" />
                               </Button>
                               <a
-                                href={job.post_url}
-                                target="_blank"
-                                rel="noreferrer"
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (job.post_url) {
+                                    (window as any).api.openExternal(job.post_url);
+                                  }
+                                }}
                                 className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-all"
                               >
                                 <ExternalLink className="h-3.5 w-3.5" />

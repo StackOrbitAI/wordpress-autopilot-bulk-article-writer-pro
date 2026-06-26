@@ -247,9 +247,13 @@ export async function generateFeaturedImage(
     model: imageModel,
     prompt: enhancedPrompt,
     n: 1,
-    size: apiSize,
-    response_format: 'url'
+    size: apiSize
   };
+
+  // Only DALL-E models support response_format
+  if (imageModel.toLowerCase().startsWith('dall-e')) {
+    requestBody.response_format = 'url';
+  }
 
   // Only DALL-E 3 supports quality parameter
   if (imageModel.toLowerCase() === 'dall-e-3') {
@@ -258,13 +262,40 @@ export async function generateFeaturedImage(
 
   const response = await axios.post(url, requestBody, { headers, timeout: 90000 });
 
-  const imageUrl = response.data?.data?.[0]?.url;
-  if (!imageUrl) {
-    throw new Error('No image URL returned from provider');
+  const imgData = response.data?.data?.[0];
+  if (!imgData) {
+    throw new Error('No image data returned from provider');
   }
 
-  // Download the image locally to upload it to WordPress afterwards
-  return await downloadImage(imageUrl);
+  if (imgData.b64_json) {
+    return await saveBase64Image(imgData.b64_json);
+  } else if (imgData.url) {
+    return await downloadImage(imgData.url);
+  } else {
+    throw new Error('Neither image URL nor base64 data returned from provider');
+  }
+}
+
+async function saveBase64Image(b64Data: string): Promise<string> {
+  let userDataPath: string;
+  try {
+    userDataPath = app.getPath('userData');
+  } catch (error) {
+    userDataPath = path.resolve(__dirname, '../../');
+  }
+
+  const downloadsDir = path.join(userDataPath, 'temp_images');
+  if (!fs.existsSync(downloadsDir)) {
+    fs.mkdirSync(downloadsDir, { recursive: true });
+  }
+
+  const filename = `img_${Date.now()}.png`;
+  const localPath = path.join(downloadsDir, filename);
+
+  const buffer = Buffer.from(b64Data, 'base64');
+  await fs.promises.writeFile(localPath, buffer);
+
+  return localPath;
 }
 
 async function downloadImage(imageUrl: string): Promise<string> {

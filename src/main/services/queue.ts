@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron';
+import fs from 'fs';
 import { dbRun, dbGet, dbAll } from '../database/connection';
 import { generateArticle, generateFeaturedImage, AIProviderConfig } from './ai';
 import { createWordPressPost, uploadWordPressMedia, WordPressSiteConfig, PostPayload } from './wordpress';
@@ -49,11 +50,43 @@ class QueueManager {
     const task = await dbGet(`SELECT status FROM tasks WHERE id = ?`, [taskId]);
     if (!task) throw new Error('Task not found');
 
+    // Count waiting jobs for this task
+    const stats = await dbGet(
+      `SELECT COUNT(*) as total,
+              SUM(case when status = 'waiting' then 1 else 0 end) as waiting
+       FROM jobs WHERE task_id = ?`,
+      [taskId]
+    );
+
     await dbRun(`UPDATE tasks SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [taskId]);
-    await dbRun(`UPDATE jobs SET status = 'waiting' WHERE task_id = ? AND status = 'failed' OR status = 'skipped'`, [taskId]);
+    
+    if (stats && stats.waiting === 0) {
+      // If there are no waiting jobs at all, restart all jobs back to waiting from scratch
+      await dbRun(
+        `UPDATE jobs 
+         SET status = 'waiting', 
+             post_id = NULL, 
+             post_url = NULL, 
+             generated_title = NULL, 
+             generated_content = NULL, 
+             image_url = NULL, 
+             error_message = NULL, 
+             token_usage = 0, 
+             estimated_cost = 0.0,
+             retries = 0,
+             started_at = NULL, 
+             completed_at = NULL 
+         WHERE task_id = ?`,
+        [taskId]
+      );
+      await this.log(taskId, null, 'info', `No waiting jobs found. Resetting all task jobs to waiting.`);
+    } else {
+      // Reset failed/skipped jobs to waiting (fixing operator precedence bug)
+      await dbRun(`UPDATE jobs SET status = 'waiting' WHERE task_id = ? AND (status = 'failed' OR status = 'skipped')`, [taskId]);
+    }
     
     this.runningTaskIds.add(taskId);
-    this.log(taskId, null, 'info', `Task execution started.`);
+    await this.log(taskId, null, 'info', `Task execution started.`);
     this.notifyUI('task-status-changed', { taskId, status: 'running' });
 
     // Trigger process loop
@@ -263,7 +296,6 @@ class QueueManager {
       let cleanContent = genResult.text;
       let seoTitle = parsedTitle;
       let seoDescription = `Learn all about ${keyword} in our detailed guide.`;
-      let slug = keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       // Simple extraction of Title from H1 or markdown title
       const titleMatch = genResult.text.match(/^#\s+(.+)$/m) || genResult.text.match(/^Title:\s*(.+)$/im);
@@ -273,6 +305,14 @@ class QueueManager {
         // Strip out the first H1 if it's there
         cleanContent = genResult.text.replace(/^#\s+.+$/m, '').trim();
       }
+
+      // Generate SEO-ready slug from the final parsed title (fallback to keyword)
+      const slugText = parsedTitle || keyword;
+      let slug = slugText
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')
+        .substring(0, 200);
 
       // Convert generated markdown to clean HTML (standard simple converter)
       const htmlContent = markdownToHtml(cleanContent);
@@ -410,6 +450,110 @@ class QueueManager {
   }
 }
 
+function parseMarkdownTables(text: string): string {
+  const lines = text.split('\n');
+  const result: string[] = [];
+  let inTable = false;
+  let tableHeaders: string[] = [];
+  let tableRows: string[][] = [];
+  let tableAlignments: ('left' | 'center' | 'right' | null)[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // A line is a table line if it contains '|' and isn't just an empty line
+    const isPipeLine = line.startsWith('|') || (line.includes('|') && line.split('|').length > 1);
+
+    if (isPipeLine) {
+      // Split by pipe
+      let cells = line.split('|').map(c => c.trim());
+      // If it starts with '|', the first element is empty
+      if (line.startsWith('|')) cells.shift();
+      // If it ends with '|', the last element is empty
+      if (line.endsWith('|') && cells.length > 0) cells.pop();
+
+      if (!inTable) {
+        // Peek at the next line to see if it is a separator row.
+        const nextLine = lines[i + 1] ? lines[i + 1].trim() : '';
+        const isSeparator = nextLine.includes('|') && /^[|:\-\s]+$/.test(nextLine) && nextLine.includes('-');
+        
+        if (isSeparator) {
+          inTable = true;
+          tableHeaders = cells;
+          
+          let sepCells = nextLine.split('|').map(c => c.trim());
+          if (nextLine.startsWith('|')) sepCells.shift();
+          if (nextLine.endsWith('|') && sepCells.length > 0) sepCells.pop();
+          
+          tableAlignments = sepCells.map(cell => {
+            const left = cell.startsWith(':');
+            const right = cell.endsWith(':');
+            if (left && right) return 'center';
+            if (right) return 'right';
+            if (left) return 'left';
+            return null;
+          });
+          // Skip the separator line
+          i++;
+          continue;
+        }
+      } else {
+        // We are inside a table
+        if (/^[|:\-\s]+$/.test(line) && line.includes('-')) {
+          continue;
+        }
+        tableRows.push(cells);
+        continue;
+      }
+    }
+
+    // If we were in a table and current line is not a table line
+    if (inTable && !isPipeLine) {
+      const htmlTable = buildHtmlTable(tableHeaders, tableRows, tableAlignments);
+      result.push(htmlTable);
+      inTable = false;
+      tableHeaders = [];
+      tableRows = [];
+      tableAlignments = [];
+    }
+
+    if (!inTable) {
+      result.push(lines[i]);
+    }
+  }
+
+  if (inTable) {
+    const htmlTable = buildHtmlTable(tableHeaders, tableRows, tableAlignments);
+    result.push(htmlTable);
+  }
+
+  return result.join('\n');
+}
+
+function buildHtmlTable(headers: string[], rows: string[][], alignments: ('left' | 'center' | 'right' | null)[]): string {
+  let html = '<table class="wp-block-table"><thead><tr>';
+  headers.forEach((h, index) => {
+    const align = alignments[index];
+    const alignStyle = align ? ` style="text-align: ${align};"` : '';
+    html += `<th${alignStyle}>${h}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  
+  rows.forEach(row => {
+    html += '<tr>';
+    for (let index = 0; index < headers.length; index++) {
+      const cell = row[index] !== undefined ? row[index] : '';
+      const align = alignments[index];
+      const alignStyle = align ? ` style="text-align: ${align};"` : '';
+      html += `<td${alignStyle}>${cell}</td>`;
+    }
+    html += '</tr>';
+  });
+  
+  html += '</tbody></table>';
+  return html;
+}
+
 // Simple Markdown to HTML converter to format content for WordPress REST API
 function markdownToHtml(markdown: string): string {
   let html = markdown;
@@ -421,13 +565,13 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
   // Headings H3
-  html = html.replace(/^\s*###\s+(.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^[ \t]*###[ \t]+([^\r\n]+)$/gm, '<h3>$1</h3>');
   
   // Headings H2
-  html = html.replace(/^\s*##\s+(.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^[ \t]*##[ \t]+([^\r\n]+)$/gm, '<h2>$1</h2>');
 
   // Headings H1 (if any remaining)
-  html = html.replace(/^\s*#\s+(.+)$/gm, '<h1>$1</h1>');
+  html = html.replace(/^[ \t]*#[ \t]+([^\r\n]+)$/gm, '<h1>$1</h1>');
 
   // Bold
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -435,29 +579,56 @@ function markdownToHtml(markdown: string): string {
   // Italic
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-  // Lists (bullet points)
-  // Standard simple parser for lines starting with * or -
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+  // Blockquotes
+  html = html.replace(/^[ \t]*>[ \t]+([^\r\n]+)$/gm, '<blockquote>$1</blockquote>');
+
+  // Tables
+  html = parseMarkdownTables(html);
+
+  // Lists (bullet points & numbered lists)
   const lines = html.split('\n');
-  let inList = false;
+  let currentListType: 'ul' | 'ol' | null = null;
+  
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    if (line.startsWith('- ') || line.startsWith('* ')) {
-      const itemContent = line.slice(2);
-      if (!inList) {
+    const isUnordered = line.startsWith('- ') || line.startsWith('* ');
+    const isOrdered = /^\d+\.\s+/.test(line);
+    
+    if (isUnordered) {
+      const itemContent = line.slice(2).trim();
+      if (currentListType === null) {
         lines[i] = '<ul>\n<li>' + itemContent + '</li>';
-        inList = true;
+        currentListType = 'ul';
+      } else if (currentListType === 'ol') {
+        lines[i] = '</ol>\n<ul>\n<li>' + itemContent + '</li>';
+        currentListType = 'ul';
+      } else {
+        lines[i] = '<li>' + itemContent + '</li>';
+      }
+    } else if (isOrdered) {
+      const match = line.match(/^\d+\.\s+(.+)$/);
+      const itemContent = match ? match[1].trim() : line.replace(/^\d+\.\s+/, '').trim();
+      if (currentListType === null) {
+        lines[i] = '<ol>\n<li>' + itemContent + '</li>';
+        currentListType = 'ol';
+      } else if (currentListType === 'ul') {
+        lines[i] = '</ul>\n<ol>\n<li>' + itemContent + '</li>';
+        currentListType = 'ol';
       } else {
         lines[i] = '<li>' + itemContent + '</li>';
       }
     } else {
-      if (inList) {
-        lines[i] = '</ul>\n' + lines[i];
-        inList = false;
+      if (currentListType !== null) {
+        lines[i] = `</${currentListType}>\n` + lines[i];
+        currentListType = null;
       }
     }
   }
-  if (inList) {
-    lines.push('</ul>');
+  if (currentListType !== null) {
+    lines.push(`</${currentListType}>`);
   }
   html = lines.join('\n');
 
@@ -473,7 +644,9 @@ function markdownToHtml(markdown: string): string {
       !block.startsWith('<li') && 
       !block.startsWith('<pre') && 
       !block.startsWith('<table') &&
-      !block.startsWith('</ul')
+      !block.startsWith('<blockquote') &&
+      !block.startsWith('</ul') &&
+      !block.startsWith('</ol')
     ) {
       blocks[i] = `<p>${block}</p>`;
     }

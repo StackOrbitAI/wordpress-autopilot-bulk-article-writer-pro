@@ -332,9 +332,13 @@ const Queue: React.FC<QueueProps> = ({ selectedTaskId }) => {
                         <div className="flex items-center space-x-3 shrink-0">
                           {job.status === 'completed' && (
                             <a 
-                              href={job.post_url} 
-                              target="_blank" 
-                              rel="noreferrer"
+                              href="#" 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (job.post_url) {
+                                  (window as any).api.openExternal(job.post_url);
+                                }
+                              }}
                               className="text-indigo-400 hover:text-indigo-300 flex items-center space-x-1 border border-indigo-500/10 hover:border-indigo-500/30 px-2 py-1 rounded bg-indigo-500/5 transition-all text-[11px]"
                             >
                               <span>Visit Post</span>
