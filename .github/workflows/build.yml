@@ -39,6 +39,7 @@ jobs:
           cache: 'npm'
 
       - name: Update NPM to latest (Fixes node-gyp compatibility issues)
+        if: matrix.container == null
         run: npm install -g npm@latest
 
       - name: Install System Dependencies (Linux)
