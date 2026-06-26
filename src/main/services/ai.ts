@@ -243,14 +243,20 @@ export async function generateFeaturedImage(
 
   const imageModel = model || 'gpt-image-2';
 
-  const response = await axios.post(url, {
+  const requestBody: Record<string, any> = {
     model: imageModel,
     prompt: enhancedPrompt,
     n: 1,
     size: apiSize,
-    quality: 'standard',
     response_format: 'url'
-  }, { headers, timeout: 90000 });
+  };
+
+  // Only DALL-E 3 supports quality parameter
+  if (imageModel.toLowerCase() === 'dall-e-3') {
+    requestBody.quality = 'standard';
+  }
+
+  const response = await axios.post(url, requestBody, { headers, timeout: 90000 });
 
   const imageUrl = response.data?.data?.[0]?.url;
   if (!imageUrl) {

@@ -35,6 +35,17 @@ const Queue: React.FC<QueueProps> = ({ selectedTaskId }) => {
   const [totalCost, setTotalCost] = useState<number>(0);
   
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const handleCopyLogs = () => {
+    const logsText = logs.map((log: any) => {
+      const timeStr = new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return `[${timeStr}] ${log.message}`;
+    }).join('\n');
+    navigator.clipboard.writeText(logsText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
@@ -391,9 +402,19 @@ const Queue: React.FC<QueueProps> = ({ selectedTaskId }) => {
                     <Terminal className="h-4 w-4 text-indigo-400 mr-2" />
                     pipeline-console.log
                   </CardTitle>
-                  <Badge variant="outline" className="text-[9px] border-zinc-800 font-mono text-zinc-500 animate-pulse">
-                    Live
-                  </Badge>
+                  <div className="flex items-center space-x-2">
+                    {logs.length > 0 && (
+                      <button
+                        onClick={handleCopyLogs}
+                        className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors border border-indigo-500/20 px-2 py-0.5 rounded bg-indigo-500/5"
+                      >
+                        {copied ? 'Copied!' : 'Copy Logs'}
+                      </button>
+                    )}
+                    <Badge variant="outline" className="text-[9px] border-zinc-800 font-mono text-zinc-500 animate-pulse">
+                      Live
+                    </Badge>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="p-4">

@@ -628,6 +628,16 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
               </Select>
             </div>
             
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Publish Status</label>
+              <Select value={publishingMode} onChange={(e: any) => setPublishingMode(e.target.value)}>
+                <option value="draft">Save as Draft</option>
+                <option value="pending">Pending Review</option>
+                <option value="publish">Publish Immediately</option>
+                <option value="future">Post Schedule Time</option>
+              </Select>
+            </div>
+            
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex justify-between items-center">
                 <span>Category Target(s) (Select one or more)</span>
