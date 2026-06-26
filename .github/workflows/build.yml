@@ -18,7 +18,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-2022, macos-latest]
 
     steps:
       - name: Checkout Code
@@ -45,7 +45,7 @@ jobs:
 
       - name: Package App and Publish Release Artifacts
         env:
-          # Token required to push releases to the public releases repository
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          # GITHUB_TOKEN has write access to the same repo for releases
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npx electron-builder --publish always

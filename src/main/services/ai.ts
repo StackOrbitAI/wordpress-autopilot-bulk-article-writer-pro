@@ -221,7 +221,8 @@ export async function generateFeaturedImage(
   config: AIProviderConfig,
   prompt: string,
   size: string,
-  style: string
+  style: string,
+  model?: string
 ): Promise<string> {
   // Only DALL-E (OpenAI) supported natively for direct image generation.
   // Custom endpoints can be configured if they support OpenAI image spec.
@@ -240,8 +241,10 @@ export async function generateFeaturedImage(
     'Content-Type': 'application/json'
   };
 
+  const imageModel = model || 'gpt-image-2';
+
   const response = await axios.post(url, {
-    model: 'gpt-image-2',
+    model: imageModel,
     prompt: enhancedPrompt,
     n: 1,
     size: apiSize,

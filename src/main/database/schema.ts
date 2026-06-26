@@ -69,6 +69,7 @@ export const SCHEMA_TABLES = [
     error_message TEXT,
     token_usage INTEGER DEFAULT 0,
     estimated_cost REAL DEFAULT 0.0,
+    retries INTEGER DEFAULT 0,
     started_at TEXT,
     completed_at TEXT,
     FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE

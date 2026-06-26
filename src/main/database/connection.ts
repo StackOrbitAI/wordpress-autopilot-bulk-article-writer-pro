@@ -71,6 +71,17 @@ async function runMigrations(): Promise<void> {
   for (const seedSql of SEED_DATA) {
     await dbRun(seedSql);
   }
+
+  // Custom migration for retries column
+  try {
+    await dbRun(`ALTER TABLE jobs ADD COLUMN retries INTEGER DEFAULT 0`);
+    console.log('[Database] Migration: Added retries column to jobs table successfully.');
+  } catch (err: any) {
+    // SQLite returns "duplicate column name: retries" if it already exists
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[Database] Migration warning (adding retries column):', err.message);
+    }
+  }
 }
 
 // Close database connection

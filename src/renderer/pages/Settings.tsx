@@ -8,7 +8,8 @@ import {
   Sliders, 
   Info,
   Server,
-  Lock
+  Lock,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -20,8 +21,10 @@ const Settings: React.FC = () => {
   const [apiTimeout, setApiTimeout] = useState('60000');
   const [retryCount, setRetryCount] = useState('3');
   const [proxy, setProxy] = useState('');
+  const [imageModel, setImageModel] = useState('gpt-image-2');
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     // Load current settings from database
@@ -34,6 +37,7 @@ const Settings: React.FC = () => {
         if (settings.api_timeout) setApiTimeout(settings.api_timeout);
         if (settings.retry_count) setRetryCount(settings.retry_count);
         if (settings.proxy) setProxy(settings.proxy);
+        if (settings.image_model) setImageModel(settings.image_model);
       } catch (err) {
         console.error(err);
       }
@@ -52,7 +56,9 @@ const Settings: React.FC = () => {
       await api.updateSetting('api_timeout', apiTimeout);
       await api.updateSetting('retry_count', retryCount);
       await api.updateSetting('proxy', proxy);
-      alert('Settings saved successfully!');
+      await api.updateSetting('image_model', imageModel);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       console.error(err);
       alert('Failed to save settings.');
@@ -159,6 +165,31 @@ const Settings: React.FC = () => {
           <Card className="border-zinc-800/80">
             <CardHeader className="border-b border-zinc-800/40 pb-4">
               <CardTitle className="text-sm flex items-center">
+                <ImageIcon className="h-4 w-4 text-indigo-400 mr-2" />
+                AI Image Generation Model
+              </CardTitle>
+              <CardDescription>Select the model used to generate featured images for articles.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                  Featured Image AI Model
+                </label>
+                <Select value={imageModel} onChange={(e) => setImageModel(e.target.value)}>
+                  <option value="gpt-image-2">gpt-image-2 (OpenAI — Default, Best Quality)</option>
+                  <option value="dall-e-3">dall-e-3 (OpenAI — High Quality)</option>
+                  <option value="dall-e-2">dall-e-2 (OpenAI — Faster, Lower Cost)</option>
+                </Select>
+                <p className="text-[10px] text-zinc-500">
+                  Requires an OpenAI API key. gpt-image-2 is the latest model and produces the best results for blog featured images.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-zinc-800/80">
+            <CardHeader className="border-b border-zinc-800/40 pb-4">
+              <CardTitle className="text-sm flex items-center">
                 <Lock className="h-4 w-4 text-indigo-400 mr-2" />
                 Local Security & Encryption Keys
               </CardTitle>
@@ -190,10 +221,10 @@ const Settings: React.FC = () => {
               <Button
                 type="submit"
                 disabled={saving}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold font-outfit flex items-center justify-center space-x-1.5"
+                className={`w-full font-semibold font-outfit flex items-center justify-center space-x-1.5 transition-all ${saved ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white`}
               >
                 <Save className="h-4 w-4" />
-                <span>{saving ? 'Saving...' : 'Save Configuration'}</span>
+                <span>{saving ? 'Saving...' : saved ? '✓ Settings Saved!' : 'Save Configuration'}</span>
               </Button>
             </CardContent>
           </Card>

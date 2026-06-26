@@ -95,6 +95,35 @@ class QueueManager {
   }
 
   /**
+   * Restarts a completed/failed/cancelled task from scratch
+   */
+  public async restartTask(taskId: number): Promise<void> {
+    await dbRun(`UPDATE tasks SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [taskId]);
+    await dbRun(
+      `UPDATE jobs 
+       SET status = 'waiting', 
+           post_id = NULL, 
+           post_url = NULL, 
+           generated_title = NULL, 
+           generated_content = NULL, 
+           image_url = NULL, 
+           error_message = NULL, 
+           token_usage = 0, 
+           estimated_cost = 0.0,
+           retries = 0,
+           started_at = NULL, 
+           completed_at = NULL 
+       WHERE task_id = ?`,
+      [taskId]
+    );
+    this.runningTaskIds.add(taskId);
+    this.log(taskId, null, 'info', `Task restarted from scratch.`);
+    this.notifyUI('task-status-changed', { taskId, status: 'running' });
+    
+    this.triggerQueue();
+  }
+
+  /**
    * Triggers the worker loop asynchronously
    */
   private triggerQueue() {
@@ -272,7 +301,11 @@ class QueueManager {
             }
           }
 
-          localImagePath = await generateFeaturedImage(imgKeyConfig, keyword, job.image_size, job.image_style);
+          // Read image_model from global settings (default: gpt-image-2)
+          const imageModelSetting = await dbGet(`SELECT value FROM settings WHERE key = 'image_model'`);
+          const imageModel = imageModelSetting?.value || 'gpt-image-2';
+
+          localImagePath = await generateFeaturedImage(imgKeyConfig, keyword, job.image_size, job.image_style, imageModel);
           await this.log(taskId, jobId, 'info', `Featured image generated successfully. Uploading to WordPress...`);
 
           const media = await uploadWordPressMedia(wpConfig, localImagePath, keyword);
@@ -350,16 +383,31 @@ class QueueManager {
       console.error('[QueueManager] Job failed:', error);
       const errMsg = error.message || 'Unknown content generation error';
       await this.log(taskId, jobId, 'error', `Job failed: ${errMsg}`);
-      
-      await dbRun(
-        `UPDATE jobs 
-         SET status = 'failed', 
-             error_message = ?, 
-             completed_at = CURRENT_TIMESTAMP 
-         WHERE id = ?`,
-        [errMsg, jobId]
-      );
-      this.notifyUI('job-status-changed', { jobId, taskId, status: 'failed' });
+
+      // Check if we should auto-retry
+      const retryLimitSetting = await dbGet(`SELECT value FROM settings WHERE key = 'retry_count'`);
+      const retryLimit = parseInt(retryLimitSetting?.value || '3', 10);
+      const currentRetries = job.retries || 0;
+
+      if (currentRetries < retryLimit) {
+        const nextRetry = currentRetries + 1;
+        await dbRun(
+          `UPDATE jobs SET status = 'waiting', retries = ?, error_message = ? WHERE id = ?`,
+          [nextRetry, errMsg, jobId]
+        );
+        await this.log(taskId, jobId, 'warn', `Auto-retrying job (attempt ${nextRetry} of ${retryLimit})...`);
+        this.notifyUI('job-status-changed', { jobId, taskId, status: 'waiting' });
+      } else {
+        await dbRun(
+          `UPDATE jobs 
+           SET status = 'failed', 
+               error_message = ?, 
+               completed_at = CURRENT_TIMESTAMP 
+           WHERE id = ?`,
+          [errMsg, jobId]
+        );
+        this.notifyUI('job-status-changed', { jobId, taskId, status: 'failed' });
+      }
     }
   }
 }

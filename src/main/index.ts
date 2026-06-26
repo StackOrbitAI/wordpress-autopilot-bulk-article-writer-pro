@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'path';
 import { initDatabase, closeDatabase, dbAll, dbRun, dbGet } from './database/connection';
 import { encrypt, decrypt } from './services/security';
-import { testWordPressConnection } from './services/wordpress';
+import { testWordPressConnection, getWordPressCategories } from './services/wordpress';
 import { queueManager } from './services/queue';
 import { scheduler } from './services/scheduler';
 import { setupAutoUpdater } from './services/updater';
@@ -51,6 +51,20 @@ function createWindow() {
 app.whenReady().then(async () => {
   // Initialize Database
   await initDatabase();
+
+  // Resume running tasks on startup
+  try {
+    const runningTasks = await dbAll(`SELECT id FROM tasks WHERE status = 'running'`);
+    for (const t of runningTasks) {
+      console.log(`[Startup] Resuming task ID ${t.id}...`);
+      // Start processing but do not block app init
+      queueManager.startTask(t.id).catch(err => {
+        console.error(`[Startup] Error resuming task ${t.id}:`, err);
+      });
+    }
+  } catch (err: any) {
+    console.error('[Startup] Failed to auto-resume running tasks:', err.message);
+  }
 
   // Start Express API Server
   await startExpressServer(4890, (siteData) => {
@@ -296,6 +310,80 @@ ipcMain.handle('queue:cancel', async (_event, id: number) => {
 
 ipcMain.handle('queue:retry', async (_event, id: number) => {
   await queueManager.retryTask(id);
+  return { success: true };
+});
+
+ipcMain.handle('queue:stop', async (_event, id: number) => {
+  await queueManager.cancelTask(id);
+  return { success: true };
+});
+
+ipcMain.handle('queue:restart', async (_event, id: number) => {
+  await queueManager.restartTask(id);
+  return { success: true };
+});
+
+ipcMain.handle('wp:getCategories', async (_event, websiteId: number) => {
+  const site = await dbGet(`SELECT url, username, password FROM websites WHERE id = ?`, [websiteId]);
+  if (!site) throw new Error('Website not found');
+
+  const decryptedPassword = decrypt(site.password);
+  const categories = await getWordPressCategories({
+    url: site.url,
+    username: site.username,
+    password: decryptedPassword
+  });
+  return categories;
+});
+
+ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
+  const {
+    name, websiteId, language, country, category, keywords,
+    promptTemplate, providerId, model, imageGeneration,
+    imageStyle, imageSize, articleLength, publishingMode,
+    seoSettings, scheduleSettings, isScheduled, status
+  } = taskData;
+
+  await dbRun(
+    `UPDATE tasks SET 
+      name = ?, website_id = ?, language = ?, country = ?, category = ?, 
+      keywords = ?, prompt_template = ?, provider_id = ?, model = ?, 
+      image_generation = ?, image_style = ?, image_size = ?, article_length = ?, 
+      publishing_mode = ?, seo_settings = ?, schedule_settings = ?, status = ?,
+      updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [
+      name, websiteId, language, country, category, 
+      JSON.stringify(keywords), promptTemplate, providerId, model, 
+      imageGeneration ? 1 : 0, imageStyle, imageSize, articleLength, 
+      publishingMode, JSON.stringify(seoSettings || {}), 
+      JSON.stringify(scheduleSettings || {}), status, id
+    ]
+  );
+
+  // Sync keyword jobs
+  const currentJobs = await dbAll(`SELECT id, keyword, status FROM jobs WHERE task_id = ?`, [id]);
+  const currentKeywords = currentJobs.map(j => j.keyword);
+  const newKeywordsSet = new Set(keywords);
+
+  // Delete jobs that are no longer present and are waiting/skipped/failed
+  for (const job of currentJobs) {
+    if (!newKeywordsSet.has(job.keyword) && (job.status === 'waiting' || job.status === 'skipped' || job.status === 'failed')) {
+      await dbRun(`DELETE FROM jobs WHERE id = ?`, [job.id]);
+    }
+  }
+
+  // Insert new jobs
+  const currentKeywordsSet = new Set(currentKeywords);
+  for (const kw of keywords) {
+    if (!currentKeywordsSet.has(kw)) {
+      await dbRun(
+        `INSERT INTO jobs (task_id, keyword, status) VALUES (?, ?, 'waiting')`,
+        [id, kw]
+      );
+    }
+  }
+
   return { success: true };
 });
 

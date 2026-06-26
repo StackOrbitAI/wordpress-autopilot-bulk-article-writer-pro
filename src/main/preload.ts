@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   deleteWebsite: (id: number) => ipcRenderer.invoke('db:deleteWebsite', id),
   testWebsite: (id: number) => ipcRenderer.invoke('db:testWebsite', id),
   testWebsiteConfig: (site: any) => ipcRenderer.invoke('db:testWebsiteConfig', site),
+  getWordPressCategories: (websiteId: number) => ipcRenderer.invoke('wp:getCategories', websiteId),
 
   // AI Providers Keys
   getApiKeys: () => ipcRenderer.invoke('db:getApiKeys'),
@@ -22,13 +23,16 @@ contextBridge.exposeInMainWorld('api', {
   getTasks: () => ipcRenderer.invoke('db:getTasks'),
   getTaskById: (id: number) => ipcRenderer.invoke('db:getTaskById', id),
   createTask: (task: any) => ipcRenderer.invoke('db:createTask', task),
+  updateTask: (id: number, task: any) => ipcRenderer.invoke('db:updateTask', id, task),
   deleteTask: (id: number) => ipcRenderer.invoke('db:deleteTask', id),
   duplicateTask: (id: number) => ipcRenderer.invoke('db:duplicateTask', id),
   
   // Queue Operations
   startTask: (id: number) => ipcRenderer.invoke('queue:start', id),
   pauseTask: (id: number) => ipcRenderer.invoke('queue:pause', id),
+  stopTask: (id: number) => ipcRenderer.invoke('queue:stop', id),
   cancelTask: (id: number) => ipcRenderer.invoke('queue:cancel', id),
+  restartTask: (id: number) => ipcRenderer.invoke('queue:restart', id),
   retryTask: (id: number) => ipcRenderer.invoke('queue:retry', id),
   getJobs: (taskId: number) => ipcRenderer.invoke('db:getJobs', taskId),
   getLogs: (taskId: number, limit?: number) => ipcRenderer.invoke('db:getLogs', taskId, limit),

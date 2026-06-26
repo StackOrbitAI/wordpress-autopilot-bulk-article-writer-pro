@@ -291,3 +291,33 @@ export async function createWordPressPost(
     throw new Error(error.response?.data?.message || 'Failed to publish post to WordPress');
   }
 }
+
+/**
+ * Fetches all categories from WordPress site.
+ */
+export async function getWordPressCategories(
+  config: WordPressSiteConfig
+): Promise<{ id: number; name: string; slug: string }[]> {
+  const baseUrl = cleanUrl(config.url);
+  const authHeader = getAuthHeader(config);
+
+  try {
+    const response = await axios.get(`${baseUrl}/wp-json/wp/v2/categories`, {
+      params: { per_page: 100 },
+      headers: { 'Authorization': authHeader },
+      timeout: 15000
+    });
+    
+    if (Array.isArray(response.data)) {
+      return response.data.map((cat: any) => ({
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug
+      }));
+    }
+    return [];
+  } catch (error: any) {
+    console.error(`[WordPress] Fetching categories failed for ${config.url}:`, error.message);
+    throw new Error(error.response?.data?.message || 'Failed to fetch categories from WordPress REST API');
+  }
+}
