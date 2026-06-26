@@ -29,7 +29,7 @@ jobs:
 
       - name: Install Python setuptools (Required for SQLite compilation on macOS)
         if: matrix.os == 'macos-latest'
-        run: pip3 install setuptools
+        run: pip3 install setuptools --break-system-packages
 
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
