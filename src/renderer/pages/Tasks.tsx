@@ -231,24 +231,38 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
     return () => window.removeEventListener('click', handleWindowClick);
   }, []);
 
+  // Ensure default selections are set once websites load
+  useEffect(() => {
+    if (!websiteId && websites.length > 0) {
+      setWebsiteId(websites[0].id.toString());
+    }
+  }, [websiteId, websites]);
+
   // Update available models when selected provider changes
   useEffect(() => {
+    if (!providerId && providers.length > 0) {
+      setProviderId(providers[0].id.toString());
+      return;
+    }
     if (!providerId) return;
+
     const selected = providers.find(p => p.id.toString() === providerId);
     if (selected) {
       const models = JSON.parse(selected.models || '[]');
       if (models.length > 0) {
-        const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
-        if (gpt4oIndex !== -1) {
-          setModel(models[gpt4oIndex]);
-        } else {
-          setModel(models[0]);
+        if (!models.includes(model)) {
+          const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
+          if (gpt4oIndex !== -1) {
+            setModel(models[gpt4oIndex]);
+          } else {
+            setModel(models[0]);
+          }
         }
       } else {
         setModel('');
       }
     }
-  }, [providerId, providers]);
+  }, [providerId, providers, model]);
 
   // File Importer (CSV, TXT, Excel)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
