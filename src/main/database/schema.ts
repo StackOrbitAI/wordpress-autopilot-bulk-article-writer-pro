@@ -98,7 +98,7 @@ export const SCHEMA_INDEXES = [
 
 export const SEED_DATA = [
   // Default Settings
-  `INSERT OR IGNORE INTO settings (key, value) VALUES ('theme', 'dark')`,
+  `INSERT OR IGNORE INTO settings (key, value) VALUES ('theme', 'light')`,
   `INSERT OR IGNORE INTO settings (key, value) VALUES ('concurrency', '2')`,
   `INSERT OR IGNORE INTO settings (key, value) VALUES ('api_timeout', '60000')`,
   `INSERT OR IGNORE INTO settings (key, value) VALUES ('retry_count', '3')`,

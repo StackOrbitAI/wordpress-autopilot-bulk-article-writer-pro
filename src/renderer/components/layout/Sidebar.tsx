@@ -32,6 +32,26 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
   {
+    version: '1.0.51',
+    date: '2026-06-29',
+    type: 'feature',
+    changes: [
+      'Changed the default installation theme setting to light mode instead of dark mode.',
+      'Fixed Gemini 404 API errors by adding support for Gemini 3.5 and 3.1 models in the providers selection.',
+      'Removed discontinued Gemini model versions from standard selection options.'
+    ]
+  },
+  {
+    version: '1.0.50',
+    date: '2026-06-29',
+    type: 'fix',
+    changes: [
+      'Fixed a major WordPress media upload timeout inheritance bug.',
+      'Allow caller-specified timeouts to bypass the default 30-second cap (increased upload limit to 120s).',
+      'Aborted early on connection timeout to prevent cascading hangs across fallback routes.'
+    ]
+  },
+  {
     version: '1.0.49',
     date: '2026-06-29',
     type: 'feature',

@@ -160,11 +160,11 @@ async function makeWordPressRequest(
       }
 
       const response = await requestWithRedirects({
+        timeout: 30000,
         ...axiosConfigExtra,
         url: finalUrl,
         headers,
-        params: (endpoint.type === 'standard' || endpoint.type === 'index_json' || endpoint.type === 'wp_com_public') ? axiosConfigExtra.params : undefined,
-        timeout: 30000
+        params: (endpoint.type === 'standard' || endpoint.type === 'index_json' || endpoint.type === 'wp_com_public') ? axiosConfigExtra.params : undefined
       });
 
       return response;
@@ -172,8 +172,11 @@ async function makeWordPressRequest(
       console.warn(`[WordPress] Request failed for endpoint [${endpoint.url}]:`, error.message);
       lastError = error;
       
-      // If it's a 401/403 or network failure, we still continue to fallback endpoints
-      // in case standard /wp-json routes are explicitly blocked/forbidden by security plugins (e.g., Wordfence, Cloudflare).
+      // If it's a timeout error (e.g. server too slow or upload taking time),
+      // do not waste time trying other endpoints which will also time out.
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        throw error;
+      }
     }
   }
 
@@ -337,7 +340,7 @@ export async function uploadWordPressMedia(
       },
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
-      timeout: 60000
+      timeout: 120000
     });
 
     const mediaId = response.data?.id;

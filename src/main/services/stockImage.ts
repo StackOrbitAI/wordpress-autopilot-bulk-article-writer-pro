@@ -51,11 +51,11 @@ async function scoreCandidatesWithAI(
     // Select a low-cost, fast model based on the provider
     let model = 'gpt-4o-mini';
     if (aiConfig.provider === 'gemini') {
-      model = 'gemini-2.5-flash';
+      model = 'gemini-1.5-flash';
     } else if (aiConfig.provider === 'claude') {
       model = 'claude-3-5-haiku-latest';
     } else if (aiConfig.provider === 'openrouter') {
-      model = 'google/gemini-2.5-flash';
+      model = 'google/gemini-1.5-flash';
     }
 
     const prompt = `You are an editorial director selecting a featured image for a blog post titled "${keyword}".

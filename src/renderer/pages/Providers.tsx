@@ -25,9 +25,9 @@ const Providers: React.FC = () => {
   // Default models list for pre-population
   const defaultModels: Record<string, string[]> = {
     openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-    gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-2.5-pro'],
+    gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-3.5-flash', 'gemini-3.5-pro', 'gemini-3.1-flash', 'gemini-3.1-pro'],
     claude: ['claude-3-5-sonnet-latest', 'claude-3-opus-latest', 'claude-3-haiku-20240307'],
-    openrouter: ['google/gemini-flash-1.5', 'google/gemini-2.5-flash', 'google/gemini-2.5-pro', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3-70b-instruct'],
+    openrouter: ['google/gemini-3.5-flash', 'google/gemini-3.5-pro', 'google/gemini-1.5-flash', 'google/gemini-1.5-pro', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3-70b-instruct'],
     custom: ['gpt-4o-mini', 'deepseek-chat']
   };
 

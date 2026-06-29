@@ -13,7 +13,7 @@ import './index.css';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [theme, setTheme] = useState<string>('dark');
+  const [theme, setTheme] = useState<string>('light');
   const [loading, setLoading] = useState<boolean>(true);
   
   // Custom navigation parameters (e.g. passing taskId to Queue page)
@@ -31,7 +31,7 @@ const App: React.FC = () => {
         const settings = await api.getSettings();
         
         // Setup theme class
-        const currentTheme = settings.theme || 'dark';
+        const currentTheme = settings.theme || 'light';
         setTheme(currentTheme);
         document.documentElement.className = currentTheme;
       } catch (err) {
