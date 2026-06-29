@@ -187,6 +187,10 @@ ipcMain.handle('app:openExternal', async (_event, url: string) => {
   return { success: true };
 });
 
+ipcMain.handle('app:getVersion', () => {
+  return app.getVersion();
+});
+
 // Settings
 ipcMain.handle('db:getSettings', async () => {
   const rows = await dbAll(`SELECT key, value FROM settings`);
