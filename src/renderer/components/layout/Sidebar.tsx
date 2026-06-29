@@ -34,6 +34,15 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
   {
+    version: '1.0.54',
+    date: '2026-06-29',
+    type: 'major',
+    changes: [
+      'Synchronized repository remote links and package names to the renamed repository structure.',
+      'Refactored packaging builds to target the new wordpress-autopilot-bulk-article-seo-writer-pro-with-ai-agents repository releases.'
+    ]
+  },
+  {
     version: '1.0.53',
     date: '2026-06-29',
     type: 'major',
