@@ -104,6 +104,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
   const [publishTargetWp, setPublishTargetWp] = useState(true);
   const [publishTargetGoogle, setPublishTargetGoogle] = useState(false);
   const [seoPlugin, setSeoPlugin] = useState<'yoast' | 'rankmath' | 'aioseo' | 'none'>('yoast');
+  const [insertInternalLinks, setInsertInternalLinks] = useState<boolean>(true);
+  const [internalLinksCount, setInternalLinksCount] = useState<number>(3);
+  const [insertOutboundLinks, setInsertOutboundLinks] = useState<boolean>(true);
+  const [outboundLinksCount, setOutboundLinksCount] = useState<number>(5);
   const [isScheduled, setIsScheduled] = useState(false);
   
   // Scheduling fields
@@ -604,6 +608,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
     
     const seo = JSON.parse(task.seo_settings || '{}');
     setSeoPlugin(seo.plugin || 'yoast');
+    setInsertInternalLinks(seo.insertInternalLinks !== false);
+    setInternalLinksCount(seo.internalLinksCount !== undefined ? seo.internalLinksCount : 3);
+    setInsertOutboundLinks(seo.insertOutboundLinks !== false);
+    setOutboundLinksCount(seo.outboundLinksCount !== undefined ? seo.outboundLinksCount : 5);
 
     const sched = JSON.parse(task.schedule_settings || '{}');
     if (sched.startDate) {
@@ -704,6 +712,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         setPublishTargetWp(d.publishTargetWp !== undefined ? d.publishTargetWp : true);
         setPublishTargetGoogle(d.publishTargetGoogle !== undefined ? d.publishTargetGoogle : false);
         setSeoPlugin(d.seoPlugin || 'yoast');
+        setInsertInternalLinks(d.insertInternalLinks !== undefined ? d.insertInternalLinks : true);
+        setInternalLinksCount(d.internalLinksCount !== undefined ? d.internalLinksCount : 3);
+        setInsertOutboundLinks(d.insertOutboundLinks !== undefined ? d.insertOutboundLinks : true);
+        setOutboundLinksCount(d.outboundLinksCount !== undefined ? d.outboundLinksCount : 5);
         setIsScheduled(d.isScheduled || false);
         setScheduleFrequency(d.scheduleFrequency || 'once');
         return;
@@ -775,6 +787,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
     setArticleLength('medium');
     setPublishingMode('publish');
     setSeoPlugin('yoast');
+    setInsertInternalLinks(true);
+    setInternalLinksCount(3);
+    setInsertOutboundLinks(true);
+    setOutboundLinksCount(5);
     setIsScheduled(false);
     setScheduleFrequency('once');
   };
@@ -879,7 +895,13 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       insertInlineImages: insertInlineImages ? 1 : 0,
       articleLength,
       publishingMode: publishingMode === 'future' ? 'future' : publishingMode,
-      seoSettings: { plugin: seoPlugin },
+      seoSettings: {
+        plugin: seoPlugin,
+        insertInternalLinks,
+        internalLinksCount,
+        insertOutboundLinks,
+        outboundLinksCount
+      },
       scheduleSettings,
       isScheduled,
       publishTarget
@@ -907,6 +929,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
           publishTargetWp,
           publishTargetGoogle,
           seoPlugin,
+          insertInternalLinks,
+          internalLinksCount,
+          insertOutboundLinks,
+          outboundLinksCount,
           isScheduled,
           scheduleFrequency
         };
@@ -1492,6 +1518,69 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Internal & External SEO Links Control Card */}
+            <div className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 space-y-4">
+              <h5 className="text-xs font-bold text-zinc-200 uppercase tracking-wider border-b border-zinc-800/40 pb-2">SEO Article Links Controls</h5>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Internal Links Column */}
+                <div className="space-y-4 bg-zinc-950/40 border border-zinc-900 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h6 className="text-[11px] font-bold text-zinc-300">Insert Internal Links</h6>
+                      <p className="text-[9px] text-zinc-500">Insert placeholder wiki-style internal links.</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={insertInternalLinks}
+                      onChange={(e) => setInsertInternalLinks(e.target.checked)}
+                      className="rounded border-zinc-800 bg-zinc-950 text-indigo-600 focus:ring-indigo-500/30 h-4 w-4 accent-indigo-600 cursor-pointer"
+                    />
+                  </div>
+                  {insertInternalLinks && (
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Number of Internal Links</label>
+                      <Select value={internalLinksCount.toString()} onChange={(e) => setInternalLinksCount(parseInt(e.target.value, 10))}>
+                        <option value="1">1 Link</option>
+                        <option value="2">2 Links</option>
+                        <option value="3">3 Links (Default)</option>
+                        <option value="5">5 Links</option>
+                        <option value="8">8 Links</option>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+
+                {/* External/Outbound Links Column */}
+                <div className="space-y-4 bg-zinc-950/40 border border-zinc-900 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h6 className="text-[11px] font-bold text-zinc-300">Insert Outbound Links</h6>
+                      <p className="text-[9px] text-zinc-500">Insert authoritative outbound reference links.</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={insertOutboundLinks}
+                      onChange={(e) => setInsertOutboundLinks(e.target.checked)}
+                      className="rounded border-zinc-800 bg-zinc-950 text-indigo-600 focus:ring-indigo-500/30 h-4 w-4 accent-indigo-600 cursor-pointer"
+                    />
+                  </div>
+                  {insertOutboundLinks && (
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Number of Outbound Links</label>
+                      <Select value={outboundLinksCount.toString()} onChange={(e) => setOutboundLinksCount(parseInt(e.target.value, 10))}>
+                        <option value="2">2 Links</option>
+                        <option value="3">3 Links</option>
+                        <option value="5">5 Links (Default)</option>
+                        <option value="8">8 Links</option>
+                        <option value="10">10 Links</option>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -575,9 +575,35 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         .replace(/{category}/g, job.category || 'General')
         .replace(/{length}/g, job.article_length || 'medium');
 
+      let promptWithLinks = customPrompt;
+      try {
+        const seoSettingsParsed = job.seo_settings ? JSON.parse(job.seo_settings) : {};
+        const insertInternal = seoSettingsParsed.insertInternalLinks !== false;
+        const internalCount = seoSettingsParsed.internalLinksCount !== undefined ? seoSettingsParsed.internalLinksCount : 3;
+        const insertOutbound = seoSettingsParsed.insertOutboundLinks !== false;
+        const outboundCount = seoSettingsParsed.outboundLinksCount !== undefined ? seoSettingsParsed.outboundLinksCount : 5;
+
+        let linkInstructions = '\n\nLink Guidelines:\n';
+        if (insertOutbound) {
+          linkInstructions += `- You MUST incorporate exactly ${outboundCount} outbound reference links to authoritative external websites inside the content. The links should be embedded naturally in keywords using markdown [keyword](url) format. Do not use generic links or raw URLs.\n`;
+        } else {
+          linkInstructions += `- Do NOT include any outbound/external links in the article content.\n`;
+        }
+
+        if (insertInternal) {
+          linkInstructions += `- You MUST incorporate exactly ${internalCount} placeholder internal links matching related articles inside the content using markdown [keyword](/category/related-keyword) format. Do not use generic anchor text.\n`;
+        } else {
+          linkInstructions += `- Do NOT include any internal links in the article content.\n`;
+        }
+
+        promptWithLinks += linkInstructions;
+      } catch (e) {
+        // ignore
+      }
+
       // 4. Generate content
       await this.log(taskId, jobId, 'info', `Generating article content...`);
-      const genResult = await generateArticle(aiConfig, job.model, customPrompt);
+      const genResult = await generateArticle(aiConfig, job.model, promptWithLinks);
       
       await this.log(
         taskId, jobId, 'info', 
@@ -625,6 +651,31 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
           keyword
         );
       }
+
+      let creditHtml = '';
+      let providerName = 'Stock Library';
+      if (job.image_generation === 1) providerName = 'OpenAI DALL-E';
+      else if (job.image_generation === 100) providerName = 'Runware.ai';
+      else if (job.image_generation === 101) providerName = 'Google Gemini Imagen';
+      else if (job.image_generation === 2) providerName = 'Pexels';
+      else if (job.image_generation === 3) providerName = 'Unsplash';
+      else if (job.image_generation === 4) providerName = 'Pixabay';
+      else if (job.image_generation >= 10 && job.image_generation <= 19) providerName = 'Premium Niche Stock Presets';
+
+      if (job.image_generation > 0) {
+        creditHtml += `<p style="margin: 0; font-size: 11px; color: #71717a; font-style: italic;">Featured Image Credit: Generated/Sourced via ${providerName}.</p>`;
+      }
+      if (job.insert_inline_images === 1) {
+        creditHtml += `<p style="margin: 4px 0 0 0; font-size: 11px; color: #71717a; font-style: italic;">Inline Images Credit: Sourced from Pexels, Unsplash, Pixabay, NASA, Wikimedia, and Openverse free stock databases.</p>`;
+      }
+
+      const disclaimerHtml = `
+<div style="margin-top: 40px; padding: 15px; border-top: 1px solid rgba(113, 113, 122, 0.2); font-size: 11px; color: #71717a; line-height: 1.6;">
+  ${creditHtml}
+  <p style="margin: 8px 0 0 0;"><strong>Disclaimer:</strong> This article is AI-generated for informational and educational purposes. While we strive to provide high-quality context and authority, the content should not be used as professional advice. The author/website assumes no liability for external links or factual omissions.</p>
+</div>
+`;
+      finalHtmlContent += disclaimerHtml;
 
       // 5. Generate Featured Image if enabled
       let featuredImageId: number | undefined = undefined;
@@ -703,10 +754,40 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       if (isGoogleTarget) {
         await this.log(taskId, jobId, 'info', `Creating Google Doc...`);
         try {
+          const googleDocSeoHeader = `
+<div style="background-color: #f4f4f5; border: 1px solid #e4e4e7; padding: 15px; margin-bottom: 25px; border-radius: 6px; font-family: Arial, sans-serif; font-size: 13px; color: #18181b;">
+  <h3 style="margin-top: 0; color: #4f46e5; border-bottom: 1px solid #e4e4e7; padding-bottom: 8px; font-size: 15px;">SEO METADATA & COMPATIBILITY DETAILS</h3>
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 6px 0; font-weight: bold; width: 150px; border-bottom: 1px solid #f4f4f5;">Focus Keyword:</td>
+      <td style="padding: 6px 0; color: #27272a; border-bottom: 1px solid #f4f4f5;">${keyword}</td>
+    </tr>
+    <tr>
+      <td style="padding: 6px 0; font-weight: bold; border-bottom: 1px solid #f4f4f5;">SEO Title:</td>
+      <td style="padding: 6px 0; color: #27272a; border-bottom: 1px solid #f4f4f5;">${seoTitle}</td>
+    </tr>
+    <tr>
+      <td style="padding: 6px 0; font-weight: bold; border-bottom: 1px solid #f4f4f5;">Meta Description:</td>
+      <td style="padding: 6px 0; color: #27272a; border-bottom: 1px solid #f4f4f5;">${seoDescription}</td>
+    </tr>
+    <tr>
+      <td style="padding: 6px 0; font-weight: bold; border-bottom: 1px solid #f4f4f5;">Slug / Short URL:</td>
+      <td style="padding: 6px 0; color: #27272a; border-bottom: 1px solid #f4f4f5;">${slug}</td>
+    </tr>
+    <tr>
+      <td style="padding: 6px 0; font-weight: bold; border-bottom: 1px solid #f4f4f5;">SEO Plugin Target:</td>
+      <td style="padding: 6px 0; color: #27272a; text-transform: uppercase; border-bottom: 1px solid #f4f4f5;">${seoPlugin}</td>
+    </tr>
+  </table>
+</div>
+<hr style="border: 0; border-top: 1px solid #e4e4e7; margin-bottom: 25px;" />
+`;
+          const googleDocContent = googleDocSeoHeader + finalHtmlContent;
+
           const docResult = await googleDocsService.createGoogleDoc(
             googleConfig,
             parsedTitle,
-            finalHtmlContent
+            googleDocContent
           );
           googleDocUrl = docResult.url;
           await this.log(taskId, jobId, 'info', `Published successfully to Google Docs! Link: ${docResult.url}`);
