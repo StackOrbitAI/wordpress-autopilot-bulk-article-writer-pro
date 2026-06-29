@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { KeyRound, Plus, Trash2, CheckCircle2, AlertTriangle, BadgeAlert, BrainCircuit, Globe } from 'lucide-react';
+import { KeyRound, Plus, Trash2, Edit2, CheckCircle2, AlertTriangle, BadgeAlert, BrainCircuit, Globe } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -11,6 +11,7 @@ const Providers: React.FC = () => {
   const [keys, setKeys] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [openAdd, setOpenAdd] = useState<boolean>(false);
+  const [editingKeyId, setEditingKeyId] = useState<number | null>(null);
 
   // Form Fields
   const [provider, setProvider] = useState<'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom'>('openai');
@@ -32,6 +33,8 @@ const Providers: React.FC = () => {
   };
 
   useEffect(() => {
+    if (editingKeyId) return; // Do not overwrite state when editing
+    
     // Populate default name & models when provider changes
     const readable: Record<string, string> = {
       openai: 'OpenAI Production',
@@ -45,7 +48,7 @@ const Providers: React.FC = () => {
     if (provider === 'openai') setBaseUrl('https://api.openai.com/v1');
     else if (provider === 'openrouter') setBaseUrl('https://openrouter.ai/api/v1');
     else setBaseUrl('');
-  }, [provider]);
+  }, [provider, editingKeyId]);
 
   const fetchKeys = async () => {
     const api = (window as any).api;
@@ -80,25 +83,52 @@ const Providers: React.FC = () => {
       .filter(m => m.length > 0);
 
     try {
-      const res = await api.addApiKey({
-        provider,
-        name,
-        apiKey,
-        baseUrl,
-        organization,
-        models: parsedModels,
-        isDefault
-      });
+      let res;
+      if (editingKeyId) {
+        res = await api.updateApiKey(editingKeyId, {
+          provider,
+          name,
+          apiKey,
+          baseUrl,
+          organization,
+          models: parsedModels,
+          isDefault
+        });
+      } else {
+        res = await api.addApiKey({
+          provider,
+          name,
+          apiKey,
+          baseUrl,
+          organization,
+          models: parsedModels,
+          isDefault
+        });
+      }
 
       if (res.success) {
         setOpenAdd(false);
         setApiKey('');
         setOrganization('');
+        setEditingKeyId(null);
         fetchKeys();
       }
     } catch (err: any) {
       setFormError(err.message || 'Failed to save API keys.');
     }
+  };
+
+  const handleEdit = (key: any) => {
+    setEditingKeyId(key.id);
+    setProvider(key.provider);
+    setName(key.name);
+    setApiKey('••••••••');
+    setBaseUrl(key.base_url || '');
+    setOrganization(key.organization || '');
+    setModelsText(JSON.parse(key.models || '[]').join(', '));
+    setIsDefault(key.is_default === 1);
+    setFormError('');
+    setOpenAdd(true);
   };
 
   const handleDelete = async (id: number) => {
@@ -136,7 +166,18 @@ const Providers: React.FC = () => {
           <p className="text-xs text-zinc-400 font-medium">Add credentials for OpenAI, Google Gemini, Anthropic, or custom endpoints.</p>
         </div>
         <Button 
-          onClick={() => setOpenAdd(true)}
+          onClick={() => {
+            setEditingKeyId(null);
+            setProvider('openai');
+            setName('OpenAI Production');
+            setApiKey('');
+            setBaseUrl('https://api.openai.com/v1');
+            setOrganization('');
+            setModelsText(defaultModels.openai.join(', '));
+            setIsDefault(false);
+            setFormError('');
+            setOpenAdd(true);
+          }}
           className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold font-outfit flex items-center space-x-1.5"
         >
           <Plus className="h-4 w-4" />
@@ -158,7 +199,18 @@ const Providers: React.FC = () => {
             </p>
           </div>
           <Button 
-            onClick={() => setOpenAdd(true)}
+            onClick={() => {
+              setEditingKeyId(null);
+              setProvider('openai');
+              setName('OpenAI Production');
+              setApiKey('');
+              setBaseUrl('https://api.openai.com/v1');
+              setOrganization('');
+              setModelsText(defaultModels.openai.join(', '));
+              setIsDefault(false);
+              setFormError('');
+              setOpenAdd(true);
+            }}
             className="bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-zinc-100"
           >
             Add API Key
@@ -219,6 +271,14 @@ const Providers: React.FC = () => {
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => handleEdit(key)}
+                            className="h-8 w-8 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/5 mr-1"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleDelete(key.id)}
                             className="h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-500/5"
                           >
@@ -239,7 +299,7 @@ const Providers: React.FC = () => {
       <Dialog open={openAdd} onOpenChange={setOpenAdd}>
         <DialogContent onClose={() => setOpenAdd(false)}>
           <DialogHeader>
-            <DialogTitle>Add AI Provider Credentials</DialogTitle>
+            <DialogTitle>{editingKeyId ? 'Edit AI Provider Credentials' : 'Add AI Provider Credentials'}</DialogTitle>
             <DialogDescription>
               Configure API keys securely. Credentials are encrypted locally via AES-256-GCM.
             </DialogDescription>

@@ -94,8 +94,15 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
   const [imageStyle, setImageStyle] = useState('photorealistic');
   const [imageSize, setImageSize] = useState('1200x628');
   const [imageModel, setImageModel] = useState('gpt-image-2');
+  const [insertInlineImages, setInsertInlineImages] = useState<boolean>(false);
+  const [inlineImagesCount, setInlineImagesCount] = useState<number>(3);
+  const [inlineImagesParagraphInterval, setInlineImagesParagraphInterval] = useState<number>(3);
+  const [customImageSize, setCustomImageSize] = useState<string>('');
+  const [runwareModelsList, setRunwareModelsList] = useState<string[]>(['runware:100', 'civitai:102438@133677']);
   const [articleLength, setArticleLength] = useState('medium');
   const [publishingMode, setPublishingMode] = useState<'draft' | 'pending' | 'publish' | 'future'>('publish');
+  const [publishTargetWp, setPublishTargetWp] = useState(true);
+  const [publishTargetGoogle, setPublishTargetGoogle] = useState(false);
   const [seoPlugin, setSeoPlugin] = useState<'yoast' | 'rankmath' | 'aioseo' | 'none'>('yoast');
   const [isScheduled, setIsScheduled] = useState(false);
   
@@ -160,6 +167,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       const savedSettings = await api.getSettings();
       const lastWebId = savedSettings.find((s: any) => s.key === 'last_selected_website')?.value;
       const lastCat = savedSettings.find((s: any) => s.key === 'last_selected_category')?.value;
+      const runwareModelsSetting = savedSettings.find((s: any) => s.key === 'runware_custom_models')?.value;
+      if (runwareModelsSetting) {
+        setRunwareModelsList(runwareModelsSetting.split(',').map((m: string) => m.trim()).filter(Boolean));
+      }
 
       const defaultsStr = localStorage.getItem('task_defaults');
       if (defaultsStr) {
@@ -181,7 +192,20 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
           
           setPromptTemplate(d.promptTemplate || '');
           
-          if (d.providerId && provs.some(p => p.id.toString() === d.providerId)) {
+          const dbDefaultProv = provs.find((p: any) => p.is_default === 1);
+          if (dbDefaultProv) {
+            setProviderId(dbDefaultProv.id.toString());
+            const models = JSON.parse(dbDefaultProv.models || '[]');
+            if (models.length > 0) {
+              const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
+              if (gpt4oIndex !== -1) {
+                setModel(models[gpt4oIndex]);
+              } else {
+                setModel(models[0]);
+              }
+              setIsCustomModel(false);
+            }
+          } else if (d.providerId && provs.some(p => p.id.toString() === d.providerId)) {
             setProviderId(d.providerId);
             const selected = provs.find(p => p.id.toString() === d.providerId);
             const models = JSON.parse(selected?.models || '[]');
@@ -193,9 +217,8 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
               setModel(models[0]);
             }
           } else if (provs.length > 0) {
-            const defaultProv = provs.find((p: any) => p.is_default === 1) || provs[0];
-            setProviderId(defaultProv.id.toString());
-            const models = JSON.parse(defaultProv.models || '[]');
+            setProviderId(provs[0].id.toString());
+            const models = JSON.parse(provs[0].models || '[]');
             if (models.length > 0) {
               setIsCustomModel(false);
               setModel(models[0]);
@@ -208,6 +231,8 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
           setImageModel(d.imageModel || 'gpt-image-2');
           setArticleLength(d.articleLength || 'medium');
           setPublishingMode(d.publishingMode || 'publish');
+          setPublishTargetWp(d.publishTargetWp !== undefined ? d.publishTargetWp : true);
+          setPublishTargetGoogle(d.publishTargetGoogle !== undefined ? d.publishTargetGoogle : false);
           setSeoPlugin(d.seoPlugin || 'yoast');
           setIsScheduled(d.isScheduled || false);
           setScheduleFrequency(d.scheduleFrequency || 'once');
@@ -239,6 +264,7 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
           } else {
             setModel(models[0]);
           }
+          setIsCustomModel(false);
         }
       }
     } catch (err) {
@@ -277,6 +303,8 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         setImageSize(draft.imageSize || '1200x628');
         setArticleLength(draft.articleLength || 'medium');
         setPublishingMode(draft.publishingMode || 'draft');
+        setPublishTargetWp(draft.publishTargetWp !== undefined ? draft.publishTargetWp : true);
+        setPublishTargetGoogle(draft.publishTargetGoogle !== undefined ? draft.publishTargetGoogle : false);
         setSeoPlugin(draft.seoPlugin || 'yoast');
         setIsScheduled(draft.isScheduled || false);
         setScheduleDate(draft.scheduleDate || '');
@@ -300,7 +328,8 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         name, websiteId, selectedCategories, keywords,
         promptTemplate, providerId, model, imageGeneration, imageStyle,
         imageSize, articleLength, publishingMode, seoPlugin, isScheduled,
-        scheduleDate, scheduleTime, scheduleFrequency, step, editingTaskId
+        scheduleDate, scheduleTime, scheduleFrequency, step, editingTaskId,
+        publishTargetWp, publishTargetGoogle
       };
       localStorage.setItem('task_wizard_draft', JSON.stringify(draft));
     }, 10000);
@@ -309,7 +338,8 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
     openAdd, name, websiteId, selectedCategories, keywords,
     promptTemplate, providerId, model, imageGeneration, imageStyle,
     imageSize, articleLength, publishingMode, seoPlugin, isScheduled,
-    scheduleDate, scheduleTime, scheduleFrequency, step, editingTaskId
+    scheduleDate, scheduleTime, scheduleFrequency, step, editingTaskId,
+    publishTargetWp, publishTargetGoogle
   ]);
 
   // Click outside to close dropdowns
@@ -335,6 +365,7 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       return;
     }
     if (!providerId) return;
+    if (isCustomModel) return;
 
     const selected = providers.find(p => p.id.toString() === providerId);
     if (selected) {
@@ -352,7 +383,7 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         setModel('');
       }
     }
-  }, [providerId, providers, model]);
+  }, [providerId, providers, model, isCustomModel]);
 
   // File Importer (CSV, TXT, Excel)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -520,6 +551,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
     setEditingTaskId(task.id);
     setName(task.name);
     setWebsiteId(task.website_id.toString());
+    const isWp = !task.publish_target || task.publish_target.includes('wordpress');
+    const isGoogle = !!(task.publish_target && task.publish_target.includes('googledocs'));
+    setPublishTargetWp(isWp);
+    setPublishTargetGoogle(isGoogle);
     setSelectedCategories(task.category ? task.category.split(',').map((c: string) => c.trim()).filter(Boolean) : []);
     setCategoryQuery('');
     setKeywords(JSON.parse(task.keywords || '[]'));
@@ -536,18 +571,34 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
     setImageGeneration(task.image_generation || 0);
     let styleVal = task.image_style || 'photorealistic';
     let modelVal = 'gpt-image-2';
+    let inlineCountVal = 3;
+    let inlineIntervalVal = 3;
     if (styleVal.startsWith('{')) {
       try {
         const parsed = JSON.parse(styleVal);
         styleVal = parsed.style || 'photorealistic';
         modelVal = parsed.model || 'gpt-image-2';
+        if (parsed.inlineCount !== undefined) inlineCountVal = parsed.inlineCount;
+        if (parsed.inlineInterval !== undefined) inlineIntervalVal = parsed.inlineInterval;
       } catch (e) {
         // ignore
       }
     }
     setImageStyle(styleVal);
     setImageModel(modelVal);
-    setImageSize(task.image_size || '1200x628');
+    setInlineImagesCount(inlineCountVal);
+    setInlineImagesParagraphInterval(inlineIntervalVal);
+    setInsertInlineImages(task.insert_inline_images === 1);
+
+    const stdSizes = ['1200x628', '1200x675', '1024x1024', '1024x768', '768x1024'];
+    const sizeVal = task.image_size || '1200x628';
+    if (stdSizes.includes(sizeVal)) {
+      setImageSize(sizeVal);
+      setCustomImageSize('');
+    } else {
+      setImageSize('custom');
+      setCustomImageSize(sizeVal);
+    }
     setArticleLength(task.article_length || 'medium');
     setPublishingMode(task.publishing_mode || 'publish');
     
@@ -593,7 +644,6 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
     setScheduleTime('');
     setFormError('');
     localStorage.removeItem('task_wizard_draft');
-
     const defaultsStr = localStorage.getItem('task_defaults');
     if (defaultsStr) {
       try {
@@ -607,7 +657,20 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         setSelectedCategories(d.selectedCategories || []);
         setPromptTemplate(d.promptTemplate || '');
         
-        if (d.providerId && providers.some(p => p.id.toString() === d.providerId)) {
+        const dbDefaultProv = providers.find((p: any) => p.is_default === 1);
+        if (dbDefaultProv) {
+          setProviderId(dbDefaultProv.id.toString());
+          const models = JSON.parse(dbDefaultProv.models || '[]');
+          if (models.length > 0) {
+            const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
+            if (gpt4oIndex !== -1) {
+              setModel(models[gpt4oIndex]);
+            } else {
+              setModel(models[0]);
+            }
+            setIsCustomModel(false);
+          }
+        } else if (d.providerId && providers.some(p => p.id.toString() === d.providerId)) {
           setProviderId(d.providerId);
           const selected = providers.find(p => p.id.toString() === d.providerId);
           const models = JSON.parse(selected?.models || '[]');
@@ -619,9 +682,8 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
             setModel(models[0]);
           }
         } else if (providers.length > 0) {
-          const defaultProv = providers.find((p: any) => p.is_default === 1) || providers[0];
-          setProviderId(defaultProv.id.toString());
-          const models = JSON.parse(defaultProv.models || '[]');
+          setProviderId(providers[0].id.toString());
+          const models = JSON.parse(providers[0].models || '[]');
           if (models.length > 0) {
             setIsCustomModel(false);
             setModel(models[0]);
@@ -633,8 +695,14 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         setImageStyle(d.imageStyle || 'photorealistic');
         setImageSize(d.imageSize || '1200x628');
         setImageModel(d.imageModel || 'gpt-image-2');
+        setInsertInlineImages(d.insertInlineImages !== undefined ? d.insertInlineImages : false);
+        setInlineImagesCount(d.inlineImagesCount !== undefined ? d.inlineImagesCount : 3);
+        setInlineImagesParagraphInterval(d.inlineImagesParagraphInterval !== undefined ? d.inlineImagesParagraphInterval : 3);
+        setCustomImageSize(d.customImageSize || '');
         setArticleLength(d.articleLength || 'medium');
         setPublishingMode(d.publishingMode || 'publish');
+        setPublishTargetWp(d.publishTargetWp !== undefined ? d.publishTargetWp : true);
+        setPublishTargetGoogle(d.publishTargetGoogle !== undefined ? d.publishTargetGoogle : false);
         setSeoPlugin(d.seoPlugin || 'yoast');
         setIsScheduled(d.isScheduled || false);
         setScheduleFrequency(d.scheduleFrequency || 'once');
@@ -645,6 +713,8 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
     }
 
     if (websites.length > 0) setWebsiteId(websites[0].id.toString());
+    setPublishTargetWp(true);
+    setPublishTargetGoogle(false);
     setSelectedCategories([]);
     setPromptTemplate(`Write an in-depth, captivating, and well-researched blog post of 2,000–3,000 words on {keyword}. The content should be written in a natural, human tone, engaging the reader through storytelling, personal anecdotes, and clear examples.
 
@@ -677,15 +747,31 @@ All examples must be neutral, factual, topic-focused, and informational, written
 Avoid emotional storytelling meant to simulate human experience; instead, rely on real-world context, practical explanations, observed patterns, and credible references
 
 Keep examples varied, realistic, and directly relevant to the topic, without templated storytelling formats`);
+    
     if (providers.length > 0) {
       const defaultProv = providers.find((p: any) => p.is_default === 1);
       setProviderId(defaultProv ? defaultProv.id.toString() : providers[0].id.toString());
+      const selectedProv = defaultProv || providers[0];
+      const models = JSON.parse(selectedProv.models || '[]');
+      if (models.length > 0) {
+        const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
+        if (gpt4oIndex !== -1) {
+          setModel(models[gpt4oIndex]);
+        } else {
+          setModel(models[0]);
+        }
+        setIsCustomModel(false);
+      }
     }
     setImageGeneration(1);
     setIsCustomModel(false);
     setImageStyle('photorealistic');
     setImageSize('1200x628');
     setImageModel('gpt-image-2');
+    setInsertInlineImages(false);
+    setInlineImagesCount(3);
+    setInlineImagesParagraphInterval(3);
+    setCustomImageSize('');
     setArticleLength('medium');
     setPublishingMode('publish');
     setSeoPlugin('yoast');
@@ -701,7 +787,11 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
           const dateStr = new Date().toLocaleDateString();
           setName(`Bulk Writer - ${dateStr}`);
         }
-        if (!websiteId) {
+        if (!publishTargetWp && !publishTargetGoogle) {
+          setFormError('Please select at least one publishing target.');
+          return false;
+        }
+        if (publishTargetWp && !websiteId) {
           setFormError('Please select a target WordPress site.');
           return false;
         }
@@ -760,9 +850,21 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       };
     }
 
+    const targets = [];
+    if (publishTargetWp) targets.push('wordpress');
+    if (publishTargetGoogle) targets.push('googledocs');
+    const publishTarget = targets.join(',') || 'wordpress';
+
+    const finalStyleStr = JSON.stringify({
+      style: imageStyle,
+      model: imageModel,
+      inlineCount: inlineImagesCount,
+      inlineInterval: inlineImagesParagraphInterval
+    });
+
     const taskPayload = {
       name: finalName,
-      websiteId: parseInt(websiteId, 10),
+      websiteId: publishTargetWp ? parseInt(websiteId, 10) : 0,
       language: 'en',
       country: 'us',
       category: selectedCategories.join(', '),
@@ -771,16 +873,46 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       providerId: parseInt(providerId, 10),
       model,
       imageGeneration,
-      imageStyle: imageGeneration === 1 ? JSON.stringify({ model: imageModel, style: imageStyle }) : imageStyle,
-      imageSize,
+      imageStyle: finalStyleStr,
+      imageSize: imageSize === 'custom' ? customImageSize : imageSize,
+      imageModel: imageModel || 'gpt-image-2',
+      insertInlineImages: insertInlineImages ? 1 : 0,
       articleLength,
       publishingMode: publishingMode === 'future' ? 'future' : publishingMode,
       seoSettings: { plugin: seoPlugin },
       scheduleSettings,
-      isScheduled
+      isScheduled,
+      publishTarget
     };
 
     try {
+      const saveDefaults = () => {
+        const defaults = {
+          websiteId,
+          selectedCategories,
+          promptTemplate,
+          providerId,
+          model,
+          isCustomModel,
+          imageGeneration,
+          imageStyle,
+          imageSize,
+          imageModel,
+          insertInlineImages,
+          inlineImagesCount,
+          inlineImagesParagraphInterval,
+          customImageSize,
+          articleLength,
+          publishingMode,
+          publishTargetWp,
+          publishTargetGoogle,
+          seoPlugin,
+          isScheduled,
+          scheduleFrequency
+        };
+        localStorage.setItem('task_defaults', JSON.stringify(defaults));
+      };
+
       if (editingTaskId) {
         const currentTask = tasks.find(t => t.id === editingTaskId);
         const res = await api.updateTask(editingTaskId, {
@@ -788,6 +920,7 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
           status: currentTask?.status || 'draft'
         });
         if (res.success) {
+          saveDefaults();
           setOpenAdd(false);
           resetForm();
           fetchTasks();
@@ -795,7 +928,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       } else {
         const res = await api.createTask(taskPayload);
         if (res.success) {
-          await api.updateSetting('last_selected_website', websiteId);
+          saveDefaults();
+          if (publishTargetWp && websiteId) {
+            await api.updateSetting('last_selected_website', websiteId);
+          }
           await api.updateSetting('last_selected_category', selectedCategories.join(', '));
 
           if (!isScheduled) {
@@ -836,14 +972,47 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
                 className="bg-zinc-950 border-zinc-800"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Target WordPress site</label>
-              <Select value={websiteId} onChange={(e) => setWebsiteId(e.target.value)}>
-                {websites.map(w => (
-                  <option key={w.id} value={w.id}>{w.name} ({w.url})</option>
-                ))}
-              </Select>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Publishing Target</label>
+              <div className="flex items-center space-x-6 bg-zinc-900/30 border border-zinc-800 p-3 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <input
+                    id="target-wp"
+                    type="checkbox"
+                    checked={publishTargetWp}
+                    onChange={(e) => setPublishTargetWp(e.target.checked)}
+                    className="rounded border-zinc-850 bg-zinc-950 text-indigo-600 focus:ring-indigo-500/30 h-4 w-4 accent-indigo-600 cursor-pointer"
+                  />
+                  <label htmlFor="target-wp" className="text-xs font-semibold text-zinc-300 cursor-pointer select-none">
+                    WordPress Blog
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    id="target-google"
+                    type="checkbox"
+                    checked={publishTargetGoogle}
+                    onChange={(e) => setPublishTargetGoogle(e.target.checked)}
+                    className="rounded border-zinc-850 bg-zinc-950 text-indigo-600 focus:ring-indigo-500/30 h-4 w-4 accent-indigo-600 cursor-pointer"
+                  />
+                  <label htmlFor="target-google" className="text-xs font-semibold text-zinc-300 cursor-pointer select-none">
+                    Google Docs
+                  </label>
+                </div>
+              </div>
             </div>
+
+            {publishTargetWp && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Target WordPress site</label>
+                <Select value={websiteId} onChange={(e) => setWebsiteId(e.target.value)}>
+                  {websites.map(w => (
+                    <option key={w.id} value={w.id}>{w.name} ({w.url})</option>
+                  ))}
+                </Select>
+              </div>
+            )}
             
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Publish Status</label>
@@ -1076,19 +1245,35 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
                 <Select value={imageGeneration.toString()} onChange={(e) => setImageGeneration(parseInt(e.target.value, 10))}>
                   <option value="0">None (No Featured Image)</option>
                   <option value="1">AI Generated (OpenAI DALL-E)</option>
+                  <option value="100">AI Generated (Runware.ai)</option>
+                  <option value="101">AI Generated (Google Gemini Imagen)</option>
                   <option value="2">Pexels (Free Stock Photos)</option>
                   <option value="3">Unsplash (Free Stock Photos)</option>
                   <option value="4">Pixabay (Free Stock Photos)</option>
+                  <option value="10">💻 Tech / AI (Unsplash + Pixabay Presets)</option>
+                  <option value="11">🍕 Food (Pexels + Unsplash Presets)</option>
+                  <option value="12">✈️ Travel (Flickr + Pexels Presets)</option>
+                  <option value="13">🏋️ Health / Fitness (Pexels + Pixabay Presets)</option>
+                  <option value="14">📚 Education (Wikimedia + Openverse Presets)</option>
+                  <option value="15">🚀 Science / Space (NASA + Pixabay Presets)</option>
+                  <option value="16">🛒 E-commerce (Burst + Pexels Presets)</option>
+                  <option value="17">💰 Finance / Business (Unsplash + StockSnap Presets)</option>
+                  <option value="18">🎨 Creative / Art (Reshot + Gratisography Presets)</option>
+                  <option value="19">🌿 Nature / Environment (Life of Pix + Pixabay Presets)</option>
                 </Select>
                 <p className="text-[10px] text-zinc-500">
                   {imageGeneration === 1 && "Generates a custom illustration using OpenAI DALL-E models."}
+                  {imageGeneration === 100 && "Generates a custom illustration using Stable Diffusion via Runware.ai."}
+                  {imageGeneration === 101 && "Generates a custom illustration using Google Gemini Imagen models."}
                   {imageGeneration === 2 && "Downloads high-resolution free stock photos from Pexels."}
                   {imageGeneration === 3 && "Downloads high-resolution free stock photos from Unsplash."}
                   {imageGeneration === 4 && "Downloads high-resolution free stock photos from Pixabay."}
+                  {imageGeneration >= 10 && imageGeneration <= 19 && "Applies smart niche-specific stock photo provider fallbacks."}
                   {imageGeneration === 0 && "No featured image will be added to the articles."}
                 </p>
               </div>
 
+              {/* OpenAI DALL-E Settings */}
               {imageGeneration === 1 && (
                 <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-800/40">
                   <div className="space-y-1.5 col-span-2">
@@ -1115,15 +1300,196 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
                       <option value="1200x628">1200 × 628 px (WordPress Landscape)</option>
                       <option value="1200x675">1200 × 675 px (WordPress Landscape - Alt)</option>
                       <option value="1024x1024">1024 × 1024 px (Square)</option>
+                      <option value="1024x768">1024 × 768 px (Standard Landscape)</option>
+                      <option value="768x1024">768 × 1024 px (Standard Portrait)</option>
+                      <option value="custom">Custom Size</option>
                     </Select>
                   </div>
+                  {imageSize === 'custom' && (
+                    <div className="space-y-1.5 col-span-2">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Custom Resolution</label>
+                      <Input 
+                        type="text" 
+                        value={customImageSize} 
+                        onChange={(e) => setCustomImageSize(e.target.value)} 
+                        placeholder="e.g. 800x600" 
+                        className="bg-zinc-950 border-zinc-800 text-xs font-mono"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
-              {imageGeneration > 1 && (
-                <div className="pt-2 border-t border-zinc-800/40 text-[11px] text-zinc-400 space-y-1">
-                  <p>Images will be searched and downloaded from the selected free stock library automatically using your article keywords.</p>
-                  <p className="text-[10px] text-zinc-500 italic">Make sure to configure the corresponding API Key in Global Settings.</p>
+              {/* Runware Settings */}
+              {imageGeneration === 100 && (
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-800/40">
+                  <div className="space-y-1.5 col-span-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Runware.ai Model ID</label>
+                    <Input 
+                      type="text" 
+                      value={imageModel} 
+                      onChange={(e) => setImageModel(e.target.value)} 
+                      placeholder="e.g. runware:100 or civitai:123456@7890" 
+                      className="bg-zinc-950 border-zinc-800 font-mono text-xs"
+                    />
+                    <p className="text-[9px] text-zinc-500">
+                      Standard options from settings: {runwareModelsList.join(', ')}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Aspect Style</label>
+                    <Select value={imageStyle} onChange={(e) => setImageStyle(e.target.value)}>
+                      <option value="photorealistic">Photorealistic</option>
+                      <option value="anime">Anime</option>
+                      <option value="cinematic">Cinematic</option>
+                      <option value="3d-render">3D Render</option>
+                      <option value="painting">Painting</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Image Resolution</label>
+                    <Select value={imageSize} onChange={(e) => setImageSize(e.target.value)}>
+                      <option value="1200x628">1200 × 628 px (WordPress Landscape)</option>
+                      <option value="1200x675">1200 × 675 px (WordPress Landscape - Alt)</option>
+                      <option value="1024x1024">1024 × 1024 px (Square)</option>
+                      <option value="1024x768">1024 × 768 px (Standard Landscape)</option>
+                      <option value="768x1024">768 × 1024 px (Standard Portrait)</option>
+                      <option value="custom">Custom Size</option>
+                    </Select>
+                  </div>
+                  {imageSize === 'custom' && (
+                    <div className="space-y-1.5 col-span-2">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Custom Resolution</label>
+                      <Input 
+                        type="text" 
+                        value={customImageSize} 
+                        onChange={(e) => setCustomImageSize(e.target.value)} 
+                        placeholder="e.g. 800x600" 
+                        className="bg-zinc-950 border-zinc-800 text-xs font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Gemini Imagen Settings */}
+              {imageGeneration === 101 && (
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-800/40">
+                  <div className="space-y-1.5 col-span-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Google Imagen Model</label>
+                    <Select value={imageModel} onChange={(e) => setImageModel(e.target.value)}>
+                      <option value="imagen-3.0-generate-002">imagen-3.0-generate-002 (Imagen 3 - Best Quality)</option>
+                      <option value="imagen-3.0-capability-001">imagen-3.0-capability-001</option>
+                      <option value="imagen-2.5-generate-002">imagen-2.5-generate-002</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Aspect Style</label>
+                    <Select value={imageStyle} onChange={(e) => setImageStyle(e.target.value)}>
+                      <option value="photorealistic">Photorealistic</option>
+                      <option value="natural">Natural</option>
+                      <option value="cinematic">Cinematic</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Image Resolution</label>
+                    <Select value={imageSize} onChange={(e) => setImageSize(e.target.value)}>
+                      <option value="1200x628">1200 × 628 px (WordPress Landscape)</option>
+                      <option value="1200x675">1200 × 675 px (WordPress Landscape - Alt)</option>
+                      <option value="1024x1024">1024 × 1024 px (Square)</option>
+                      <option value="1024x768">1024 × 768 px (Standard Landscape)</option>
+                      <option value="768x1024">768 × 1024 px (Standard Portrait)</option>
+                      <option value="custom">Custom Size</option>
+                    </Select>
+                  </div>
+                  {imageSize === 'custom' && (
+                    <div className="space-y-1.5 col-span-2">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Custom Resolution</label>
+                      <Input 
+                        type="text" 
+                        value={customImageSize} 
+                        onChange={(e) => setCustomImageSize(e.target.value)} 
+                        placeholder="e.g. 800x600" 
+                        className="bg-zinc-950 border-zinc-800 text-xs font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Stock / Niche Presets Settings */}
+              {((imageGeneration > 1 && imageGeneration < 100) || imageGeneration >= 10) && (
+                <div className="pt-2 border-t border-zinc-800/40 text-[11px] text-zinc-400 space-y-3">
+                  <p>Images will be searched and downloaded from the selected free stock libraries automatically using context-relevant keywords.</p>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Image Resolution</label>
+                      <Select value={imageSize} onChange={(e) => setImageSize(e.target.value)}>
+                        <option value="1200x628">1200 × 628 px (WordPress Landscape)</option>
+                        <option value="1200x675">1200 × 675 px (WordPress Landscape - Alt)</option>
+                        <option value="1024x1024">1024 × 1024 px (Square)</option>
+                        <option value="1024x768">1024 × 768 px (Standard Landscape)</option>
+                        <option value="768x1024">768 × 1024 px (Standard Portrait)</option>
+                        <option value="custom">Custom Size</option>
+                      </Select>
+                    </div>
+                    {imageSize === 'custom' && (
+                      <div className="space-y-1.5 col-span-2">
+                        <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Custom Resolution</label>
+                        <Input 
+                          type="text" 
+                          value={customImageSize} 
+                          onChange={(e) => setCustomImageSize(e.target.value)} 
+                          placeholder="e.g. 800x600" 
+                          className="bg-zinc-950 border-zinc-800 text-xs font-mono"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Inline Images Settings Card */}
+            <div className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h5 className="text-xs font-bold text-zinc-200">Insert Contextual Inline Images</h5>
+                  <p className="text-[10px] text-zinc-400">Automatically search and embed relevant stock images inside the body of the article.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={insertInlineImages}
+                  onChange={(e) => setInsertInlineImages(e.target.checked)}
+                  className="rounded border-zinc-800 bg-zinc-950 text-indigo-600 focus:ring-indigo-500/30 h-4.5 w-4.5 accent-indigo-600 cursor-pointer"
+                />
+              </div>
+
+              {insertInlineImages && (
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/40">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Max Number of Inline Images</label>
+                    <Select value={inlineImagesCount.toString()} onChange={(e) => setInlineImagesCount(parseInt(e.target.value, 10))}>
+                      <option value="1">1 Image</option>
+                      <option value="2">2 Images</option>
+                      <option value="3">3 Images</option>
+                      <option value="5">5 Images</option>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Paragraph Interval</label>
+                    <Select value={inlineImagesParagraphInterval.toString()} onChange={(e) => setInlineImagesParagraphInterval(parseInt(e.target.value, 10))}>
+                      <option value="2">Every 2 Paragraphs</option>
+                      <option value="3">Every 3 Paragraphs (Recommended)</option>
+                      <option value="4">Every 4 Paragraphs</option>
+                      <option value="5">Every 5 Paragraphs</option>
+                    </Select>
+                  </div>
+                  <p className="text-[9px] text-zinc-500 col-span-2">
+                    Images are automatically selected contextually from the stock provider based on the paragraph immediately preceding the image placement.
+                  </p>
                 </div>
               )}
             </div>

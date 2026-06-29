@@ -47,6 +47,22 @@ const Queue: React.FC<QueueProps> = ({ selectedTaskId }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const [copiedDocs, setCopiedDocs] = useState<boolean>(false);
+  const handleCopyGoogleDocsLinks = () => {
+    const urls = jobs
+      .map((j: any) => j.google_doc_url)
+      .filter((url: any) => typeof url === 'string' && url.length > 0);
+
+    if (urls.length === 0) {
+      alert('No Google Docs links available yet for this task.');
+      return;
+    }
+
+    navigator.clipboard.writeText(urls.join('\n'));
+    setCopiedDocs(true);
+    setTimeout(() => setCopiedDocs(false), 2000);
+  };
+
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
   const fetchTasks = async () => {
@@ -279,9 +295,21 @@ const Queue: React.FC<QueueProps> = ({ selectedTaskId }) => {
 
             {/* Keyword Jobs list */}
             <Card className="border-zinc-800/80">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Job Pipeline Details</CardTitle>
-                <CardDescription>Individual article status tracker.</CardDescription>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm">Job Pipeline Details</CardTitle>
+                  <CardDescription>Individual article status tracker.</CardDescription>
+                </div>
+                {jobs.some(j => j.google_doc_url) && (
+                  <Button
+                    onClick={handleCopyGoogleDocsLinks}
+                    className={`text-[10px] h-7 font-semibold font-outfit transition-all ${
+                      copiedDocs ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-zinc-850 hover:bg-zinc-800 text-zinc-300 border border-zinc-700'
+                    }`}
+                  >
+                    {copiedDocs ? '✓ Copied Docs Links!' : 'Copy All Google Docs Links'}
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Searchable/Filterable Status Tabs */}
@@ -329,19 +357,31 @@ const Queue: React.FC<QueueProps> = ({ selectedTaskId }) => {
                           )}
                         </div>
 
-                        <div className="flex items-center space-x-3 shrink-0">
-                          {job.status === 'completed' && (
+                        <div className="flex items-center space-x-2 shrink-0">
+                          {job.status === 'completed' && job.post_url && (
                             <a 
                               href="#" 
                               onClick={(e) => {
                                 e.preventDefault();
-                                if (job.post_url) {
-                                  (window as any).api.openExternal(job.post_url);
-                                }
+                                (window as any).api.openExternal(job.post_url);
                               }}
                               className="text-indigo-400 hover:text-indigo-300 flex items-center space-x-1 border border-indigo-500/10 hover:border-indigo-500/30 px-2 py-1 rounded bg-indigo-500/5 transition-all text-[11px]"
                             >
                               <span>Visit Post</span>
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+
+                          {job.status === 'completed' && job.google_doc_url && (
+                            <a 
+                              href="#" 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                (window as any).api.openExternal(job.google_doc_url);
+                              }}
+                              className="text-emerald-400 hover:text-emerald-300 flex items-center space-x-1 border border-emerald-500/10 hover:border-emerald-500/30 px-2 py-1 rounded bg-emerald-500/5 transition-all text-[11px]"
+                            >
+                              <span>Google Doc</span>
                               <ExternalLink className="h-3 w-3" />
                             </a>
                           )}

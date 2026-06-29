@@ -17,9 +17,17 @@ contextBridge.exposeInMainWorld('api', {
   // AI Providers Keys
   getApiKeys: () => ipcRenderer.invoke('db:getApiKeys'),
   addApiKey: (key: any) => ipcRenderer.invoke('db:addApiKey', key),
+  updateApiKey: (id: number, key: any) => ipcRenderer.invoke('db:updateApiKey', id, key),
   deleteApiKey: (id: number) => ipcRenderer.invoke('db:deleteApiKey', id),
   setApiKeyDefault: (id: number) => ipcRenderer.invoke('db:setApiKeyDefault', id),
   setDefaultApiKey: (id: number) => ipcRenderer.invoke('db:setDefaultApiKey', id),
+
+  // Google OAuth & Docs
+  startGoogleAuth: (clientId: string, clientSecret: string) => ipcRenderer.invoke('google:startAuth', { clientId, clientSecret }),
+  completeGoogleAuth: () => ipcRenderer.invoke('google:completeAuth'),
+  cancelGoogleAuth: () => ipcRenderer.invoke('google:cancelAuth'),
+  testGoogleConnection: (config: any) => ipcRenderer.invoke('google:testConnection', config),
+  listGoogleFolders: (config: any) => ipcRenderer.invoke('google:listFolders', config),
 
   // Tasks
   getTasks: () => ipcRenderer.invoke('db:getTasks'),

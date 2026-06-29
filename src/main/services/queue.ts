@@ -5,6 +5,7 @@ import { generateArticle, generateFeaturedImage, AIProviderConfig } from './ai';
 import { createWordPressPost, uploadWordPressMedia, WordPressSiteConfig, PostPayload } from './wordpress';
 import { decrypt } from './security';
 import { getStockImage } from './stockImage';
+import { googleDocsService } from './googleDocs';
 
 export interface QueueStatus {
   taskId: number;
@@ -187,8 +188,9 @@ class QueueManager {
       const placeHolders = activeTaskIds.map(() => '?').join(',');
       const job = await dbGet(
         `SELECT j.*, t.provider_id, t.model, t.website_id, t.language, t.country, t.category, 
-                t.prompt_template, t.image_generation, t.image_style, t.image_size, t.image_model, t.article_length, 
-                t.publishing_mode, t.seo_settings
+                t.prompt_template, t.image_generation, t.image_style, t.image_size, t.image_model, 
+                t.insert_inline_images, t.article_length, t.publishing_mode, t.seo_settings, 
+                t.publish_target, t.google_sheet_url, t.name AS task_name
          FROM jobs j
          JOIN tasks t ON j.task_id = t.id
          WHERE j.status = 'waiting' AND t.status = 'running' AND t.id IN (${placeHolders})
@@ -239,6 +241,208 @@ class QueueManager {
     }
   }
 
+  private async acquireImageWithFallback(
+    taskId: number,
+    jobId: number,
+    keyword: string,
+    initialMode: number,
+    imageStyle: string,
+    imageSize: string,
+    imageModel: string,
+    aiConfig: AIProviderConfig,
+    provider: any,
+    decryptedApiKey: string,
+    parsedTitle: string
+  ): Promise<string> {
+    const errors: string[] = [];
+    
+    let parsedStyle = 'photorealistic';
+    let parsedModel = imageModel || 'gpt-image-2';
+    if (imageStyle && imageStyle.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(imageStyle);
+        parsedStyle = parsed.style || 'photorealistic';
+        parsedModel = parsed.model || 'gpt-image-2';
+      } catch (e) {
+        // ignore
+      }
+    } else if (imageStyle) {
+      parsedStyle = imageStyle;
+    }
+
+    interface AttemptMode {
+      mode: number;
+      isAI: boolean;
+      model?: string;
+      style?: string;
+    }
+
+    let modesToTry: AttemptMode[] = [];
+
+    if (initialMode === 1) { // DALL-E
+      modesToTry.push({ mode: 1, isAI: true, model: parsedModel, style: parsedStyle });
+      modesToTry.push({ mode: 100, isAI: true, model: 'runware:100', style: parsedStyle });
+      modesToTry.push({ mode: 101, isAI: true, model: 'imagen-3.0-generate-002', style: parsedStyle });
+      modesToTry.push({ mode: 3, isAI: false }); // Unsplash
+      modesToTry.push({ mode: 2, isAI: false }); // Pexels
+      modesToTry.push({ mode: 4, isAI: false }); // Pixabay
+    } else if (initialMode === 100) { // Runware
+      modesToTry.push({ mode: 100, isAI: true, model: parsedModel, style: parsedStyle });
+      modesToTry.push({ mode: 1, isAI: true, model: 'gpt-image-2', style: parsedStyle });
+      modesToTry.push({ mode: 101, isAI: true, model: 'imagen-3.0-generate-002', style: parsedStyle });
+      modesToTry.push({ mode: 2, isAI: false }); // Pexels
+      modesToTry.push({ mode: 3, isAI: false }); // Unsplash
+      modesToTry.push({ mode: 4, isAI: false }); // Pixabay
+    } else if (initialMode === 101) { // Gemini Imagen
+      modesToTry.push({ mode: 101, isAI: true, model: parsedModel, style: parsedStyle });
+      modesToTry.push({ mode: 100, isAI: true, model: 'runware:100', style: parsedStyle });
+      modesToTry.push({ mode: 1, isAI: true, model: 'gpt-image-2', style: parsedStyle });
+      modesToTry.push({ mode: 4, isAI: false }); // Pixabay
+      modesToTry.push({ mode: 3, isAI: false }); // Unsplash
+      modesToTry.push({ mode: 2, isAI: false }); // Pexels
+    } else {
+      modesToTry.push({ mode: initialMode, isAI: false });
+      modesToTry.push({ mode: 3, isAI: false });
+      modesToTry.push({ mode: 2, isAI: false });
+      modesToTry.push({ mode: 4, isAI: false });
+    }
+
+    for (const attempt of modesToTry) {
+      try {
+        if (attempt.isAI) {
+          let imgKeyConfig = aiConfig;
+          const targetModel = attempt.model || 'gpt-image-2';
+          
+          if (targetModel.startsWith('runware') || targetModel.startsWith('civitai')) {
+            const rwKeySetting = await dbGet(`SELECT value FROM settings WHERE key = 'runware_api_key'`);
+            const rwKey = rwKeySetting?.value || '';
+            if (!rwKey) continue;
+            imgKeyConfig = { provider: 'custom', apiKey: rwKey };
+          } else if (targetModel.startsWith('imagen-')) {
+            let geminiKey = '';
+            if (provider.provider === 'gemini') {
+              geminiKey = decryptedApiKey;
+            } else {
+              const dbKey = await dbGet(`SELECT api_key FROM api_keys WHERE provider = 'gemini' ORDER BY is_default DESC LIMIT 1`);
+              if (dbKey?.api_key) geminiKey = decrypt(dbKey.api_key);
+            }
+            if (!geminiKey) continue;
+            imgKeyConfig = { provider: 'gemini', apiKey: geminiKey };
+          } else {
+            if (provider.provider !== 'openai') {
+              const oaiKey = await dbGet(`SELECT * FROM api_keys WHERE provider = 'openai' LIMIT 1`);
+              if (!oaiKey) continue;
+              imgKeyConfig = {
+                provider: 'openai',
+                apiKey: decrypt(oaiKey.api_key)
+              };
+            }
+          }
+
+          await this.log(taskId, jobId, 'info', `Attempting AI image generation using model: ${targetModel}...`);
+          const path = await generateFeaturedImage(imgKeyConfig, keyword, imageSize, attempt.style || 'photorealistic', targetModel);
+          if (path) return path;
+        } else {
+          await this.log(taskId, jobId, 'info', `Attempting stock image search using provider ID: ${attempt.mode}...`);
+          const path = await getStockImage(parsedTitle || keyword, attempt.mode, aiConfig);
+          if (path) return path;
+        }
+      } catch (err: any) {
+        console.warn(`[Featured Image Fallback Attempt] Mode ${attempt.mode} failed: ${err.message}`);
+        errors.push(`Mode ${attempt.mode}: ${err.message}`);
+      }
+    }
+    throw new Error(`All image attempts in fallback chain failed. Details: ${errors.join('; ')}`);
+  }
+
+  private async embedInlineImages(
+    htmlContent: string,
+    job: any,
+    aiConfig: any,
+    wpConfig: any,
+    isWpTarget: boolean,
+    taskId: number,
+    jobId: number,
+    parsedTitle: string,
+    keyword: string
+  ): Promise<string> {
+    let maxInlineImages = 3;
+    let paragraphInterval = 3;
+    if (job.image_style && job.image_style.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(job.image_style);
+        if (parsed.inlineCount !== undefined) maxInlineImages = parseInt(parsed.inlineCount, 10) || 3;
+        if (parsed.inlineInterval !== undefined) paragraphInterval = parseInt(parsed.inlineInterval, 10) || 3;
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const paragraphParts = htmlContent.split('</p>');
+    if (paragraphParts.length <= 1) {
+      return htmlContent;
+    }
+
+    let updatedContent = '';
+    let imagesInserted = 0;
+
+    for (let i = 0; i < paragraphParts.length; i++) {
+      let part = paragraphParts[i];
+      if (i < paragraphParts.length - 1) {
+        part += '</p>';
+      }
+      
+      updatedContent += part;
+
+      if (
+        i > 0 &&
+        i < paragraphParts.length - 1 &&
+        (i + 1) % paragraphInterval === 0 &&
+        imagesInserted < maxInlineImages
+      ) {
+        try {
+          const textContext = part.replace(/<[^>]*>/g, ' ').trim();
+          const words = textContext.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
+          const searchKeyword = words.length > 0 ? words.join(' ') : keyword;
+
+          await this.log(taskId, jobId, 'info', `Acquiring inline image after paragraph ${i + 1} matching context: "${searchKeyword}"`);
+          
+          const initialMode = job.image_generation > 0 ? job.image_generation : 3;
+          const localPath = await getStockImage(searchKeyword, initialMode, aiConfig);
+          
+          let imageUrl = '';
+          if (isWpTarget) {
+            const media = await uploadWordPressMedia(wpConfig, localPath, searchKeyword);
+            imageUrl = media.url;
+          } else {
+            const imageBuffer = fs.readFileSync(localPath);
+            const base64Image = imageBuffer.toString('base64');
+            imageUrl = `data:image/png;base64,${base64Image}`;
+          }
+
+          if (fs.existsSync(localPath)) {
+            fs.unlinkSync(localPath);
+          }
+
+          if (imageUrl) {
+            const imageBlock = `
+<figure class="wp-block-image aligncenter size-large">
+  <img src="${imageUrl}" alt="${searchKeyword}" class="rounded-xl shadow-md border border-zinc-800/40 my-6" style="width: 100%; max-width: 800px; height: auto;" />
+  <figcaption class="text-center text-xs text-zinc-500 italic mt-2">${searchKeyword}</figcaption>
+</figure>
+`;
+            updatedContent += '\n' + imageBlock + '\n';
+            imagesInserted++;
+          }
+        } catch (err: any) {
+          await this.log(taskId, jobId, 'warn', `Failed to acquire inline image after paragraph ${i + 1}: ${err.message}`);
+        }
+      }
+    }
+
+    return updatedContent;
+  }
+
   /**
    * Run an individual article generation job
    */
@@ -256,10 +460,16 @@ class QueueManager {
       const website = await dbGet(`SELECT * FROM websites WHERE id = ?`, [job.website_id]);
 
       if (!provider) throw new Error('AI Provider credentials not configured');
-      if (!website) throw new Error('WordPress website connection not configured');
+
+      const isWpTarget = !job.publish_target || job.publish_target.includes('wordpress');
+      const isGoogleTarget = job.publish_target && job.publish_target.includes('googledocs');
+
+      if (isWpTarget && !website) {
+        throw new Error('WordPress website connection not configured');
+      }
 
       const decryptedApiKey = decrypt(provider.api_key);
-      const decryptedWpPassword = decrypt(website.password);
+      const decryptedWpPassword = website ? decrypt(website.password) : '';
 
       const aiConfig: AIProviderConfig = {
         provider: provider.provider,
@@ -269,10 +479,63 @@ class QueueManager {
       };
 
       const wpConfig: WordPressSiteConfig = {
-        url: website.url,
-        username: website.username,
+        url: website?.url || '',
+        username: website?.username || '',
         password: decryptedWpPassword
       };
+
+      let googleConfig: any = null;
+      if (isGoogleTarget) {
+        const settingsList = await dbAll(`SELECT key, value FROM settings WHERE key LIKE 'google_%'`);
+        const googleSettings: any = {};
+        for (const s of settingsList) {
+          googleSettings[s.key] = s.value;
+        }
+
+        if (!googleSettings.google_auth_type) {
+          throw new Error('Google integration not configured. Please set credentials in Settings.');
+        }
+
+        googleConfig = {
+          authType: googleSettings.google_auth_type,
+          clientId: googleSettings.google_client_id,
+          clientSecret: googleSettings.google_client_secret,
+          refreshToken: googleSettings.google_refresh_token,
+          serviceAccountJson: googleSettings.google_service_account_json,
+          folderId: googleSettings.google_target_folder_id,
+          sharingMode: googleSettings.google_sharing_permissions || 'private'
+        };
+      }
+
+      let googleSheetId: string | null = null;
+      if (isGoogleTarget) {
+        // Query the latest database state for the task's google_sheet_url to prevent race conditions
+        const latestTask = await dbGet(`SELECT google_sheet_url, name FROM tasks WHERE id = ?`, [taskId]);
+        let sheetUrl = latestTask?.google_sheet_url;
+        
+        if (!sheetUrl) {
+          await this.log(taskId, jobId, 'info', `Initializing Google Sheets tracker...`);
+          try {
+            const tracker = await googleDocsService.createTrackerSheet(googleConfig, latestTask?.name || 'Task');
+            sheetUrl = tracker.url;
+            googleSheetId = tracker.id;
+            
+            // Save the tracker URL to the database
+            await dbRun(`UPDATE tasks SET google_sheet_url = ? WHERE id = ?`, [sheetUrl, taskId]);
+            await this.log(taskId, jobId, 'info', `Created Google Sheets tracker! Link: ${sheetUrl}`);
+          } catch (sheetErr: any) {
+            await this.log(taskId, jobId, 'error', `Failed to create Google Sheets tracker: ${sheetErr.message}`);
+          }
+        }
+        
+        // Extract spreadsheet ID from the URL if we didn't just create it
+        if (sheetUrl && !googleSheetId) {
+          const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+          if (match) {
+            googleSheetId = match[1];
+          }
+        }
+      }
 
       const promptTemplate = job.prompt_template || 
         `Write an in-depth, captivating, and well-researched blog post of 2,000–3,000 words on {keyword}. The content should be written in a natural, human tone, engaging the reader through storytelling, personal anecdotes, and clear examples.
@@ -347,48 +610,44 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       // Convert generated markdown to clean HTML (standard simple converter)
       const htmlContent = markdownToHtml(cleanContent);
 
+      let finalHtmlContent = htmlContent;
+      if (job.insert_inline_images === 1) {
+        await this.log(taskId, jobId, 'info', `Inserting inline images into article body...`);
+        finalHtmlContent = await this.embedInlineImages(
+          htmlContent,
+          job,
+          aiConfig,
+          wpConfig,
+          isWpTarget,
+          taskId,
+          jobId,
+          parsedTitle,
+          keyword
+        );
+      }
+
       // 5. Generate Featured Image if enabled
       let featuredImageId: number | undefined = undefined;
       let localImagePath = '';
       let uploadedImageUrl = '';
 
       if (job.image_generation > 0) {
-        const isAI = job.image_generation === 1;
-        await this.log(taskId, jobId, 'info', isAI ? `Generating featured image...` : `Fetching stock image...`);
+        await this.log(taskId, jobId, 'info', `Acquiring featured image...`);
         try {
-          if (isAI) {
-            // Find OpenAI key for DALL-E (fallback if main provider is Gemini/Claude)
-            let imgKeyConfig = aiConfig;
-            if (provider.provider !== 'openai') {
-              const oaiKey = await dbGet(`SELECT * FROM api_keys WHERE provider = 'openai' LIMIT 1`);
-              if (oaiKey) {
-                imgKeyConfig = {
-                  provider: 'openai',
-                  apiKey: decrypt(oaiKey.api_key)
-                };
-              } else {
-                throw new Error('AI image generation enabled but no OpenAI API key found');
-              }
-            }
+          localImagePath = await this.acquireImageWithFallback(
+            taskId,
+            jobId,
+            keyword,
+            job.image_generation,
+            job.image_style || '',
+            job.image_size || '1200x628',
+            job.image_model || 'gpt-image-2',
+            aiConfig,
+            provider,
+            decryptedApiKey,
+            parsedTitle
+          );
 
-            // Parse model and style from task's image_style if it is a JSON string
-            let style = job.image_style || 'photorealistic';
-            let imageModel = 'gpt-image-2';
-            if (style.startsWith('{')) {
-              try {
-                const parsed = JSON.parse(style);
-                style = parsed.style || 'photorealistic';
-                imageModel = parsed.model || 'gpt-image-2';
-              } catch (e) {
-                // ignore
-              }
-            }
-
-            localImagePath = await generateFeaturedImage(imgKeyConfig, keyword, job.image_size, style, imageModel);
-          } else {
-            // Stock image retrieval (2 = Pexels, 3 = Unsplash, 4 = Pixabay)
-            localImagePath = await getStockImage(parsedTitle || keyword, job.image_generation, aiConfig);
-          }
           await this.log(taskId, jobId, 'info', `Featured image acquired successfully. Uploading to WordPress...`);
 
           const media = await uploadWordPressMedia(wpConfig, localImagePath, keyword);
@@ -419,23 +678,64 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         plugin: seoSettingsParsed.plugin || 'none'
       };
 
-      // 7. Publish to WordPress
-      await this.log(taskId, jobId, 'info', `Creating WordPress post...`);
-      
-      const postPayload: PostPayload = {
-        title: parsedTitle,
-        content: htmlContent,
-        status: job.publishing_mode || 'draft',
-        categoryName: job.category || undefined,
-        tags: [keyword, ...(job.category ? [job.category] : [])],
-        featuredImageId,
-        slug,
-        excerpt: seoDescription,
-        seoSettings: seoPayload
-      };
+      // 7. Publish to Targets
+      let wpPost: any = null;
+      let googleDocUrl: string | undefined = undefined;
 
-      const wpPost = await createWordPressPost(wpConfig, postPayload);
-      await this.log(taskId, jobId, 'info', `Published successfully! Post ID: ${wpPost.id}. Link: ${wpPost.url}`);
+      if (isWpTarget) {
+        await this.log(taskId, jobId, 'info', `Creating WordPress post...`);
+        const postPayload: PostPayload = {
+          title: parsedTitle,
+          content: finalHtmlContent,
+          status: job.publishing_mode || 'draft',
+          categoryName: job.category || undefined,
+          tags: [keyword, ...(job.category ? [job.category] : [])],
+          featuredImageId,
+          slug,
+          excerpt: seoDescription,
+          seoSettings: seoPayload
+        };
+
+        wpPost = await createWordPressPost(wpConfig, postPayload);
+        await this.log(taskId, jobId, 'info', `Published successfully to WordPress! Post ID: ${wpPost.id}. Link: ${wpPost.url}`);
+      }
+
+      if (isGoogleTarget) {
+        await this.log(taskId, jobId, 'info', `Creating Google Doc...`);
+        try {
+          const docResult = await googleDocsService.createGoogleDoc(
+            googleConfig,
+            parsedTitle,
+            finalHtmlContent
+          );
+          googleDocUrl = docResult.url;
+          await this.log(taskId, jobId, 'info', `Published successfully to Google Docs! Link: ${docResult.url}`);
+
+          if (googleSheetId) {
+            await this.log(taskId, jobId, 'info', `Appending entry to Google Sheets tracker...`);
+            try {
+              const wordCount = finalHtmlContent.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+              await googleDocsService.appendJobToTracker(
+                googleConfig,
+                googleSheetId,
+                {
+                  keyword,
+                  title: parsedTitle,
+                  wordCount,
+                  postUrl: wpPost ? wpPost.url : '',
+                  googleDocUrl: googleDocUrl || '',
+                  estimatedCost: genResult.estimatedCost || 0
+                }
+              );
+              await this.log(taskId, jobId, 'info', `Google Sheets tracker row appended successfully.`);
+            } catch (sheetErr: any) {
+              await this.log(taskId, jobId, 'error', `Failed to append row to Google Sheets tracker: ${sheetErr.message}`);
+            }
+          }
+        } catch (googleErr: any) {
+          throw new Error(`Google Docs upload failed: ${googleErr.message}`);
+        }
+      }
 
       // 8. Mark job as complete
       await dbRun(
@@ -443,6 +743,7 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
          SET status = 'completed', 
              post_id = ?, 
              post_url = ?, 
+             google_doc_url = ?,
              generated_title = ?, 
              generated_content = ?, 
              image_url = ?,
@@ -451,17 +752,24 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
              completed_at = CURRENT_TIMESTAMP 
          WHERE id = ?`,
         [
-          wpPost.id, 
-          wpPost.url, 
+          wpPost ? wpPost.id : null, 
+          wpPost ? wpPost.url : null, 
+          googleDocUrl || null,
           parsedTitle, 
-          htmlContent, 
+          finalHtmlContent, 
           uploadedImageUrl || null,
           genResult.promptTokens + genResult.completionTokens, 
           genResult.estimatedCost, 
           jobId
         ]
       );
-      this.notifyUI('job-status-changed', { jobId, taskId, status: 'completed', postUrl: wpPost.url });
+      this.notifyUI('job-status-changed', { 
+        jobId, 
+        taskId, 
+        status: 'completed', 
+        postUrl: wpPost ? wpPost.url : null,
+        googleDocUrl: googleDocUrl || null
+      });
 
     } catch (error: any) {
       console.error('[QueueManager] Job failed:', error);

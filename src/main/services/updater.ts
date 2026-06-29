@@ -63,6 +63,7 @@ export function setupAutoUpdater(mainWindow: BrowserWindow) {
 
   autoUpdater.on('update-downloaded', (info) => {
     sendUpdateStatus('updater-update-downloaded', info);
+    autoUpdater.quitAndInstall();
   });
 
   // 2. Hook IPC commands from Renderer

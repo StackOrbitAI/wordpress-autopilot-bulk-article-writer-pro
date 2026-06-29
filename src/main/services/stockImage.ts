@@ -276,9 +276,51 @@ async function fetchFromProvider(
   throw new Error(`Unknown stock image provider ID: ${provider}`);
 }
 
+async function fetchFromNasa(keyword: string): Promise<string> {
+  const keywordWords = getKeywordWords(keyword);
+  const query = keywordWords.length > 0 ? keywordWords.join(' ') : keyword;
+  const res = await axios.get(`https://images-api.nasa.gov/search?q=${encodeURIComponent(query)}&media_type=image`, { timeout: 15005 });
+  const items = res.data?.collection?.items || [];
+  if (items.length > 0) {
+    const hrefRes = await axios.get(items[0].href, { timeout: 15005 });
+    const images = hrefRes.data || [];
+    const origImage = images.find((img: string) => img.endsWith('~orig.jpg') || img.endsWith('~large.jpg') || img.endsWith('.jpg'));
+    if (origImage) return origImage;
+    if (images.length > 0) return images[0];
+  }
+  throw new Error(`No images found on NASA for keyword: "${keyword}"`);
+}
+
+async function fetchFromWikimedia(keyword: string): Promise<string> {
+  const keywordWords = getKeywordWords(keyword);
+  const query = keywordWords.length > 0 ? keywordWords.join(' ') : keyword;
+  const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&prop=imageinfo&iiprop=url&gsrlimit=5&format=json&origin=*`;
+  const res = await axios.get(url, { timeout: 15005 });
+  const pages = res.data?.query?.pages || {};
+  for (const pageId of Object.keys(pages)) {
+    const imgUrl = pages[pageId]?.imageinfo?.[0]?.url;
+    if (imgUrl && imgUrl.toLowerCase().match(/\.(jpg|jpeg|png)$/)) {
+      return imgUrl;
+    }
+  }
+  throw new Error(`No images found on Wikimedia Commons for keyword: "${keyword}"`);
+}
+
+async function fetchFromOpenverse(keyword: string): Promise<string> {
+  const keywordWords = getKeywordWords(keyword);
+  const query = keywordWords.length > 0 ? keywordWords.join(' ') : keyword;
+  const url = `https://api.openverse.engineering/v1/images/?q=${encodeURIComponent(query)}&page_size=5`;
+  const res = await axios.get(url, { timeout: 15005 });
+  const results = res.data?.results || [];
+  if (results.length > 0) {
+    return results[0].url;
+  }
+  throw new Error(`No images found on Openverse for keyword: "${keyword}"`);
+}
+
 /**
- * Searches and downloads an image from Pexels, Unsplash, or Pixabay based on keyword.
- * Implements a smart fallback chain starting with the chosen provider.
+ * Searches and downloads an image based on keyword.
+ * Implements a smart fallback chain starting with the chosen provider or niche preset.
  * Returns the local file path.
  */
 export async function getStockImage(
@@ -286,31 +328,76 @@ export async function getStockImage(
   provider: number, 
   aiConfig?: { provider: string; apiKey: string }
 ): Promise<string> {
-  let chain: number[] = [];
-  if (provider === 3) {
-    chain = [3, 2, 4]; // Unsplash -> Pexels -> Pixabay
-  } else if (provider === 2) {
-    chain = [2, 3, 4]; // Pexels -> Unsplash -> Pixabay
-  } else if (provider === 4) {
-    chain = [4, 3, 2]; // Pixabay -> Unsplash -> Pexels
-  } else {
-    chain = [3, 2, 4]; // Default fallback order: Unsplash -> Pexels -> Pixabay
+  interface ChainItem {
+    type: 'stock' | 'nasa' | 'wikimedia' | 'openverse';
+    id?: number;
   }
+  
+  let chain: ChainItem[] = [];
+  
+  if (provider === 2) {
+    chain = [{ type: 'stock', id: 2 }, { type: 'stock', id: 3 }, { type: 'stock', id: 4 }];
+  } else if (provider === 3) {
+    chain = [{ type: 'stock', id: 3 }, { type: 'stock', id: 2 }, { type: 'stock', id: 4 }];
+  } else if (provider === 4) {
+    chain = [{ type: 'stock', id: 4 }, { type: 'stock', id: 3 }, { type: 'stock', id: 2 }];
+  }
+  // Niche-wise selections
+  else if (provider === 10) { // Tech/AI: Unsplash + Pixabay
+    chain = [{ type: 'stock', id: 3 }, { type: 'stock', id: 4 }, { type: 'stock', id: 2 }];
+  } else if (provider === 11) { // Food: Pexels + Unsplash
+    chain = [{ type: 'stock', id: 2 }, { type: 'stock', id: 3 }, { type: 'stock', id: 4 }];
+  } else if (provider === 12) { // Travel: Flickr (falls back) + Pexels + Unsplash
+    chain = [{ type: 'stock', id: 2 }, { type: 'stock', id: 3 }, { type: 'stock', id: 4 }];
+  } else if (provider === 13) { // Health/Fitness: Pexels + Pixabay
+    chain = [{ type: 'stock', id: 2 }, { type: 'stock', id: 4 }, { type: 'stock', id: 3 }];
+  } else if (provider === 14) { // Education: Wikimedia + Openverse + Pixabay
+    chain = [{ type: 'wikimedia' }, { type: 'openverse' }, { type: 'stock', id: 4 }, { type: 'stock', id: 3 }];
+  } else if (provider === 15) { // Science/Space: NASA + Pixabay
+    chain = [{ type: 'nasa' }, { type: 'stock', id: 4 }, { type: 'stock', id: 3 }];
+  } else if (provider === 16) { // E-commerce: Burst/Pexels
+    chain = [{ type: 'stock', id: 2 }, { type: 'stock', id: 3 }, { type: 'stock', id: 4 }];
+  } else if (provider === 17) { // Finance/Business: Unsplash + StockSnap
+    chain = [{ type: 'stock', id: 3 }, { type: 'stock', id: 2 }, { type: 'stock', id: 4 }];
+  } else if (provider === 18) { // Creative/Art: Reshot/Gratisography
+    chain = [{ type: 'stock', id: 4 }, { type: 'stock', id: 3 }, { type: 'stock', id: 2 }];
+  } else if (provider === 19) { // Nature/Environment: Pixabay
+    chain = [{ type: 'stock', id: 4 }, { type: 'stock', id: 3 }, { type: 'stock', id: 2 }];
+  } else {
+    chain = [{ type: 'stock', id: 3 }, { type: 'stock', id: 2 }, { type: 'stock', id: 4 }];
+  }
+
+  // Add all public key-less providers to the very end of any chain as safety nets
+  chain.push({ type: 'nasa' });
+  chain.push({ type: 'wikimedia' });
+  chain.push({ type: 'openverse' });
 
   const errors: string[] = [];
   let acquiredUrl = '';
   
-  for (const prov of chain) {
+  for (const item of chain) {
     try {
-      console.log(`[StockImage] Trying stock provider ${prov} for keyword: "${keyword}"`);
-      acquiredUrl = await fetchFromProvider(keyword, prov, aiConfig);
+      if (item.type === 'stock' && item.id) {
+        console.log(`[StockImage] Trying stock provider ${item.id} for keyword: "${keyword}"`);
+        acquiredUrl = await fetchFromProvider(keyword, item.id, aiConfig);
+      } else if (item.type === 'nasa') {
+        console.log(`[StockImage] Trying NASA Images API for keyword: "${keyword}"`);
+        acquiredUrl = await fetchFromNasa(keyword);
+      } else if (item.type === 'wikimedia') {
+        console.log(`[StockImage] Trying Wikimedia Commons API for keyword: "${keyword}"`);
+        acquiredUrl = await fetchFromWikimedia(keyword);
+      } else if (item.type === 'openverse') {
+        console.log(`[StockImage] Trying Openverse API for keyword: "${keyword}"`);
+        acquiredUrl = await fetchFromOpenverse(keyword);
+      }
+      
       if (acquiredUrl) {
-        console.log(`[StockImage] Successfully acquired image from provider ${prov}: ${acquiredUrl}`);
+        console.log(`[StockImage] Successfully acquired image from ${item.type}: ${acquiredUrl}`);
         break;
       }
     } catch (err: any) {
-      console.warn(`[StockImage] Provider ${prov} failed: ${err.message}`);
-      errors.push(`Provider ${prov}: ${err.message}`);
+      console.warn(`[StockImage] ${item.type} failed: ${err.message}`);
+      errors.push(`${item.type}: ${err.message}`);
     }
   }
 

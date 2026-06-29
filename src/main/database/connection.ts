@@ -125,6 +125,46 @@ async function runMigrations(): Promise<void> {
       console.warn('[Database] Migration warning (adding image_model column):', err.message);
     }
   }
+
+  // Custom migration for publish_target column in tasks table
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN publish_target TEXT DEFAULT 'wordpress'`);
+    console.log('[Database] Migration: Added publish_target column to tasks table successfully.');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[Database] Migration warning (adding publish_target column):', err.message);
+    }
+  }
+
+  // Custom migration for google_doc_url column in jobs table
+  try {
+    await dbRun(`ALTER TABLE jobs ADD COLUMN google_doc_url TEXT`);
+    console.log('[Database] Migration: Added google_doc_url column to jobs table successfully.');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[Database] Migration warning (adding google_doc_url column):', err.message);
+    }
+  }
+
+  // Custom migration for google_sheet_url column in tasks table
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN google_sheet_url TEXT`);
+    console.log('[Database] Migration: Added google_sheet_url column to tasks table successfully.');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[Database] Migration warning (adding google_sheet_url column):', err.message);
+    }
+  }
+
+  // Custom migration for insert_inline_images column in tasks table
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN insert_inline_images INTEGER DEFAULT 0`);
+    console.log('[Database] Migration: Added insert_inline_images column to tasks table successfully.');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[Database] Migration warning (adding insert_inline_images column):', err.message);
+    }
+  }
 }
 
 // Close database connection

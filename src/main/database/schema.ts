@@ -45,11 +45,14 @@ export const SCHEMA_TABLES = [
     image_style TEXT DEFAULT 'photorealistic',
     image_size TEXT DEFAULT '1200x628',
     image_model TEXT DEFAULT 'gpt-image-2',
+    insert_inline_images INTEGER DEFAULT 0,
     article_length TEXT DEFAULT 'medium',
     publishing_mode TEXT DEFAULT 'draft', -- draft, pending, publish, schedule
     seo_settings TEXT, -- JSON structure
     schedule_settings TEXT, -- JSON structure
     status TEXT DEFAULT 'draft', -- draft, queued, running, paused, completed, failed
+    publish_target TEXT DEFAULT 'wordpress',
+    google_sheet_url TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(website_id) REFERENCES websites(id),
@@ -64,6 +67,7 @@ export const SCHEMA_TABLES = [
     status TEXT DEFAULT 'waiting', -- waiting, running, completed, failed, skipped
     post_id INTEGER,
     post_url TEXT,
+    google_doc_url TEXT,
     generated_title TEXT,
     generated_content TEXT,
     image_url TEXT,

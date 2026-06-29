@@ -7,7 +7,8 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Globe
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
@@ -26,6 +27,23 @@ const History: React.FC = () => {
   
   // Preview modal
   const [previewJob, setPreviewJob] = useState<any | null>(null);
+
+  // Copy Docs Links States
+  const [copiedDocs, setCopiedDocs] = useState<boolean>(false);
+  const handleCopyGoogleDocsLinks = () => {
+    const urls = filteredJobs
+      .map((j: any) => j.google_doc_url)
+      .filter((url: any) => typeof url === 'string' && url.length > 0);
+
+    if (urls.length === 0) {
+      alert('No Google Docs links available under these filters.');
+      return;
+    }
+
+    navigator.clipboard.writeText(urls.join('\n'));
+    setCopiedDocs(true);
+    setTimeout(() => setCopiedDocs(false), 2000);
+  };
 
   const fetchHistory = async () => {
     const api = (window as any).api;
@@ -74,6 +92,7 @@ const History: React.FC = () => {
       Status: j.status,
       WordPressPostID: j.post_id || 'N/A',
       PostURL: j.post_url || 'N/A',
+      GoogleDocURL: j.google_doc_url || 'N/A',
       ImageURL: j.image_url || 'N/A',
       TokenUsage: j.token_usage || 0,
       EstimatedCost: j.estimated_cost || 0,
@@ -101,6 +120,7 @@ const History: React.FC = () => {
       Status: j.status,
       WordPressPostID: j.post_id || 'N/A',
       PostURL: j.post_url || 'N/A',
+      GoogleDocURL: j.google_doc_url || 'N/A',
       ImageURL: j.image_url || 'N/A',
       TokenUsage: j.token_usage || 0,
       EstimatedCost: j.estimated_cost || 0,
@@ -136,6 +156,17 @@ const History: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2">
+          {filteredJobs.some(j => j.google_doc_url) && (
+            <Button
+              onClick={handleCopyGoogleDocsLinks}
+              className={`text-xs font-semibold h-9 font-outfit transition-all ${
+                copiedDocs ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <Globe className="h-4 w-4 mr-1.5 text-emerald-400" />
+              <span>{copiedDocs ? '✓ Copied Docs Links!' : 'Copy All Google Docs Links'}</span>
+            </Button>
+          )}
           <Button
             onClick={handleExportCSV}
             disabled={filteredJobs.length === 0}
@@ -250,18 +281,34 @@ const History: React.FC = () => {
                               >
                                 <Eye className="h-3.5 w-3.5" />
                               </Button>
-                              <a
-                                href="#"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  if (job.post_url) {
+
+                              {job.post_url && (
+                                <a
+                                  href="#"
+                                  title="Visit WordPress Post"
+                                  onClick={(e) => {
+                                    e.preventDefault();
                                     (window as any).api.openExternal(job.post_url);
-                                  }
-                                }}
-                                className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-all"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
+                                  }}
+                                  className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-all"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              )}
+
+                              {job.google_doc_url && (
+                                <a
+                                  href="#"
+                                  title="Open Google Doc"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    (window as any).api.openExternal(job.google_doc_url);
+                                  }}
+                                  className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-zinc-800 text-emerald-400 hover:bg-emerald-950/20 hover:text-emerald-300 transition-all"
+                                >
+                                  <Globe className="h-3.5 w-3.5" />
+                                </a>
+                              )}
                             </>
                           )}
                         </div>

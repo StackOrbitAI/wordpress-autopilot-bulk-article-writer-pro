@@ -2,6 +2,8 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
+import { decrypt } from './security';
+import { dbGet } from '../database/connection';
 
 export interface AIProviderConfig {
   provider: 'openai' | 'gemini' | 'claude' | 'openrouter' | 'custom';
@@ -217,6 +219,101 @@ async function callClaude(
 /**
  * Generates an image and returns the local file path.
  */
+export async function generateGeminiImagen(
+  apiKey: string,
+  prompt: string,
+  size: string,
+  modelName: string = 'imagen-3.0-generate-002'
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict`;
+  
+  let aspectRatio = '1:1';
+  if (size === '1200x628' || size === '1200x675' || size === '1792x1024' || size === '16:9') {
+    aspectRatio = '16:9';
+  } else if (size === '4:3') {
+    aspectRatio = '4:3';
+  } else if (size === '9:16') {
+    aspectRatio = '9:16';
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-goog-api-key': apiKey
+  };
+
+  const response = await axios.post(url, {
+    instances: [
+      {
+        prompt: prompt
+      }
+    ],
+    parameters: {
+      sampleCount: 1,
+      aspectRatio: aspectRatio,
+      outputMimeType: 'image/jpeg'
+    }
+  }, { headers, timeout: 60000 });
+
+  const base64 = response.data?.predictions?.[0]?.bytesBase64Encoded;
+  if (!base64) {
+    throw new Error('No image returned from Gemini Imagen API');
+  }
+
+  return await saveBase64Image(base64);
+}
+
+export async function generateRunwareImage(
+  apiKey: string,
+  prompt: string,
+  size: string,
+  modelName: string = 'runware:100'
+): Promise<string> {
+  const url = 'https://api.runware.ai/v1';
+
+  let width = 1024;
+  let height = 768;
+  if (size === '1200x628' || size === '1200x675') {
+    width = 1200;
+    height = 628;
+  } else if (size.includes('x')) {
+    const parts = size.split('x');
+    width = parseInt(parts[0], 10) || 1024;
+    height = parseInt(parts[1], 10) || 768;
+  }
+
+  const headers = {
+    'Content-Type': 'application/json'
+  };
+
+  const payload = [
+    {
+      taskType: 'authentication',
+      apiKey: apiKey
+    },
+    {
+      taskType: 'imageInference',
+      taskUUID: `task_${Date.now()}`,
+      positivePrompt: prompt,
+      width: width,
+      height: height,
+      model: modelName,
+      numberResults: 1
+    }
+  ];
+
+  const response = await axios.post(url, payload, { headers, timeout: 60000 });
+  const data = response.data?.data;
+  const inferenceResult = data?.find((d: any) => d.taskType === 'imageInference');
+  const imageUrl = inferenceResult?.imageURL;
+
+  if (!imageUrl) {
+    const errResult = data?.find((d: any) => d.error);
+    throw new Error(errResult?.error || 'No image URL returned from Runware API');
+  }
+
+  return await downloadImage(imageUrl);
+}
+
 export async function generateFeaturedImage(
   config: AIProviderConfig,
   prompt: string,
@@ -224,56 +321,62 @@ export async function generateFeaturedImage(
   style: string,
   model?: string
 ): Promise<string> {
-  // Only DALL-E (OpenAI) supported natively for direct image generation.
-  // Custom endpoints can be configured if they support OpenAI image spec.
-  const defaultUrl = 'https://api.openai.com/v1';
-  const url = `${config.baseUrl || defaultUrl}/images/generations`;
-
-  // Map 1200x628 and 1200x675 to OpenAI landscape sizes if using DALL-E 3
-  // DALL-E 3 supports 1792x1024 landscape.
-  const apiSize = (size === '1200x628' || size === '1200x675') ? '1792x1024' : size;
-  
-  // Build a descriptive, photorealistic prompt based on style
+  const imageModel = model || 'gpt-image-2';
   const enhancedPrompt = `A high quality, high resolution, detailed ${style} image depicting: ${prompt}. No text, no logos, no watermarks, realistic lighting, professional composition.`;
 
+  // 1. Runware AI Generation Check
+  if (imageModel.toLowerCase().startsWith('runware') || imageModel.toLowerCase().startsWith('civitai')) {
+    const rwKeySetting = await dbGet(`SELECT value FROM settings WHERE key = 'runware_api_key'`);
+    const rwKey = rwKeySetting?.value || '';
+    if (!rwKey) {
+      throw new Error('Runware.ai API Key is not configured. Please add it in Settings.');
+    }
+    return await generateRunwareImage(rwKey, enhancedPrompt, size, imageModel);
+  }
+
+  // 2. Gemini Imagen Generation Check
+  if (imageModel.toLowerCase().startsWith('imagen-')) {
+    let geminiKey = '';
+    if (config.provider === 'gemini') {
+      geminiKey = config.apiKey;
+    } else {
+      const dbKey = await dbGet(`SELECT api_key FROM api_keys WHERE provider = 'gemini' ORDER BY is_default DESC LIMIT 1`);
+      if (dbKey?.api_key) {
+        geminiKey = decrypt(dbKey.api_key);
+      }
+    }
+    if (!geminiKey) {
+      throw new Error('Google Gemini API Key is not configured. Please add a Gemini credentials integration first.');
+    }
+    return await generateGeminiImagen(geminiKey, enhancedPrompt, size, imageModel);
+  }
+
+  // 3. Default OpenAI DALL-E Fallback
+  const defaultUrl = 'https://api.openai.com/v1';
+  const url = `${config.baseUrl || defaultUrl}/images/generations`;
+  const apiSize = (size === '1200x628' || size === '1200x675') ? '1792x1024' : size;
   const headers = {
     'Authorization': `Bearer ${config.apiKey}`,
     'Content-Type': 'application/json'
   };
-
-  const imageModel = model || 'gpt-image-2';
-
   const requestBody: Record<string, any> = {
     model: imageModel,
     prompt: enhancedPrompt,
     n: 1,
     size: apiSize
   };
-
-  // Only DALL-E models support response_format
   if (imageModel.toLowerCase().startsWith('dall-e')) {
     requestBody.response_format = 'url';
   }
-
-  // Only DALL-E 3 supports quality parameter
   if (imageModel.toLowerCase() === 'dall-e-3') {
     requestBody.quality = 'standard';
   }
-
   const response = await axios.post(url, requestBody, { headers, timeout: 120000 });
-
   const imgData = response.data?.data?.[0];
-  if (!imgData) {
-    throw new Error('No image data returned from provider');
-  }
-
-  if (imgData.b64_json) {
-    return await saveBase64Image(imgData.b64_json);
-  } else if (imgData.url) {
-    return await downloadImage(imgData.url);
-  } else {
-    throw new Error('Neither image URL nor base64 data returned from provider');
-  }
+  if (!imgData) throw new Error('No image data returned from provider');
+  if (imgData.b64_json) return await saveBase64Image(imgData.b64_json);
+  if (imgData.url) return await downloadImage(imgData.url);
+  throw new Error('Neither image URL nor base64 data returned from provider');
 }
 
 /**

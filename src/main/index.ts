@@ -7,6 +7,7 @@ import { testWordPressConnection, getWordPressCategories } from './services/word
 import { queueManager } from './services/queue';
 import { scheduler } from './services/scheduler';
 import { setupAutoUpdater } from './services/updater';
+import { googleDocsService } from './services/googleDocs';
 import { startExpressServer, stopExpressServer } from './server';
 
 let mainWindow: BrowserWindow | null = null;
@@ -320,7 +321,7 @@ ipcMain.handle('db:createTask', async (_event, taskData: any) => {
     name, websiteId, language, country, category, keywords,
     promptTemplate, providerId, model, imageGeneration,
     imageStyle, imageSize, articleLength, publishingMode,
-    seoSettings, scheduleSettings, isScheduled, imageModel
+    seoSettings, scheduleSettings, isScheduled, imageModel, publishTarget, insertInlineImages
   } = taskData;
 
   const status = isScheduled ? 'scheduled' : 'draft';
@@ -330,14 +331,15 @@ ipcMain.handle('db:createTask', async (_event, taskData: any) => {
       name, website_id, language, country, category, keywords,
       prompt_template, provider_id, model, image_generation,
       image_style, image_size, article_length, publishing_mode,
-      seo_settings, schedule_settings, status, image_model
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      seo_settings, schedule_settings, status, image_model, publish_target, insert_inline_images
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       name, websiteId, language || 'en', country || 'us', category || 'General',
       JSON.stringify(keywords), promptTemplate, providerId, model, imageGeneration !== undefined ? imageGeneration : 0,
       imageStyle || 'photorealistic', imageSize || '1200x628', articleLength || 'medium',
       publishingMode || 'draft', JSON.stringify(seoSettings || {}),
-      JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2'
+      JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2', publishTarget || 'wordpress',
+      insertInlineImages ? 1 : 0
     ]
   );
 
@@ -371,13 +373,15 @@ ipcMain.handle('db:duplicateTask', async (_event, id: number) => {
       name, website_id, language, country, category, keywords,
       prompt_template, provider_id, model, image_generation,
       image_style, image_size, article_length, publishing_mode,
-      seo_settings, schedule_settings, status, image_model
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)`,
+      seo_settings, schedule_settings, status, image_model, publish_target, insert_inline_images
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
     [
       newName, original.website_id, original.language, original.country, original.category,
       original.keywords, original.prompt_template, original.provider_id, original.model,
       original.image_generation, original.image_style, original.image_size, original.article_length,
-      original.publishing_mode, original.seo_settings, original.schedule_settings, original.image_model || 'gpt-image-2'
+      original.publishing_mode, original.seo_settings, original.schedule_settings, 
+      original.image_model || 'gpt-image-2', original.publish_target || 'wordpress',
+      original.insert_inline_images !== undefined ? original.insert_inline_images : 0
     ]
   );
 
@@ -443,7 +447,7 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
     name, websiteId, language, country, category, keywords,
     promptTemplate, providerId, model, imageGeneration,
     imageStyle, imageSize, articleLength, publishingMode,
-    seoSettings, scheduleSettings, isScheduled, status, imageModel
+    seoSettings, scheduleSettings, isScheduled, status, imageModel, publishTarget, insertInlineImages
   } = taskData;
 
   await dbRun(
@@ -452,14 +456,15 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
       keywords = ?, prompt_template = ?, provider_id = ?, model = ?, 
       image_generation = ?, image_style = ?, image_size = ?, article_length = ?, 
       publishing_mode = ?, seo_settings = ?, schedule_settings = ?, status = ?,
-      image_model = ?, updated_at = CURRENT_TIMESTAMP
+      image_model = ?, publish_target = ?, insert_inline_images = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
     [
       name, websiteId, language, country, category, 
       JSON.stringify(keywords), promptTemplate, providerId, model, 
       imageGeneration !== undefined ? imageGeneration : 0, imageStyle, imageSize, articleLength, 
       publishingMode, JSON.stringify(seoSettings || {}), 
-      JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2', id
+      JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2', publishTarget || 'wordpress',
+      insertInlineImages ? 1 : 0, id
     ]
   );
 
@@ -600,3 +605,79 @@ ipcMain.handle('db:getDashboardStats', async () => {
     recentActivity: recentLogs
   };
 });
+
+// Update API Key/Provider details
+ipcMain.handle('db:updateApiKey', async (_event, id: number, keyData: any) => {
+  const { provider, name, apiKey, baseUrl, organization, models, isDefault } = keyData;
+
+  if (isDefault) {
+    await dbRun(`UPDATE api_keys SET is_default = 0`);
+  }
+
+  let query = '';
+  let params: any[] = [];
+
+  // If password input is not modified (masked with bullet points) keep existing key
+  if (apiKey && apiKey !== '••••••••' && apiKey !== '********') {
+    const encryptedKey = encrypt(apiKey);
+    query = `UPDATE api_keys SET provider = ?, name = ?, api_key = ?, base_url = ?, organization = ?, models = ?, is_default = ? WHERE id = ?`;
+    params = [provider, name, encryptedKey, baseUrl || null, organization || null, JSON.stringify(models || []), isDefault ? 1 : 0, id];
+  } else {
+    query = `UPDATE api_keys SET provider = ?, name = ?, base_url = ?, organization = ?, models = ?, is_default = ? WHERE id = ?`;
+    params = [provider, name, baseUrl || null, organization || null, JSON.stringify(models || []), isDefault ? 1 : 0, id];
+  }
+
+  await dbRun(query, params);
+  return { success: true };
+});
+
+// Google Integration IPC handlers
+let activeAuthFlow: any = null;
+
+ipcMain.handle('google:startAuth', async (_event, { clientId, clientSecret }) => {
+  try {
+    googleDocsService.stopOAuthListener();
+    activeAuthFlow = await googleDocsService.startOAuthFlow(clientId, clientSecret);
+    return { success: true, authUrl: activeAuthFlow.authUrl };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('google:completeAuth', async (_event) => {
+  try {
+    if (!activeAuthFlow || !activeAuthFlow.getTokens) {
+      throw new Error('OAuth authorization flow was not initialized');
+    }
+    const refreshToken = await activeAuthFlow.getTokens();
+    activeAuthFlow = null;
+    return { success: true, refreshToken };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('google:cancelAuth', async (_event) => {
+  googleDocsService.stopOAuthListener();
+  activeAuthFlow = null;
+  return { success: true };
+});
+
+ipcMain.handle('google:testConnection', async (_event, config: any) => {
+  try {
+    const result = await googleDocsService.testConnection(config);
+    return { success: true, email: result.email };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('google:listFolders', async (_event, config: any) => {
+  try {
+    const folders = await googleDocsService.listFolders(config);
+    return { success: true, folders };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
