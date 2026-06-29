@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import { dbGet } from '../database/connection';
+import { generateArticle } from './ai';
 
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'in', 'on', 'at', 'for', 'to', 'with', 'is', 'of',
@@ -39,12 +40,61 @@ function calculateRelevance(text: string, keywordWords: string[]): number {
 }
 
 /**
+ * Scores candidates using the configured LLM for high-accuracy semantic matching
+ */
+async function scoreCandidatesWithAI(
+  keyword: string,
+  candidates: { alt: string; description: string; tags: string }[],
+  aiConfig: { provider: string; apiKey: string }
+): Promise<number | null> {
+  try {
+    // Select a low-cost, fast model based on the provider
+    let model = 'gpt-4o-mini';
+    if (aiConfig.provider === 'gemini') {
+      model = 'gemini-2.5-flash';
+    } else if (aiConfig.provider === 'claude') {
+      model = 'claude-3-5-haiku-latest';
+    } else if (aiConfig.provider === 'openrouter') {
+      model = 'google/gemini-2.5-flash';
+    }
+
+    const prompt = `You are an editorial director selecting a featured image for a blog post titled "${keyword}".
+Below is a list of candidate stock photo descriptions, alt text, and tags. Evaluate which photo has the highest semantic relevance, visual suitability, and thematic match for the article title.
+
+Candidates:
+${candidates.map((c, i) => `[Image ${i}]: Alt: ${c.alt || 'N/A'}. Tags: ${c.tags || 'N/A'}. Description: ${c.description || 'N/A'}`).join('\n')}
+
+Identify the single best candidate. You must return ONLY the integer index (e.g. 0, 1, 2) of the chosen image. Do NOT write any other text, explanation, or markdown. Only output a single integer.`;
+
+    const result = await generateArticle(
+      aiConfig,
+      model,
+      prompt,
+      "You are a precise selector that returns only a single integer index representing the chosen option."
+    );
+
+    const cleanResult = result.text.trim().replace(/[^\d]/g, '');
+    const index = parseInt(cleanResult, 10);
+    if (!isNaN(index) && index >= 0 && index < candidates.length) {
+      console.log(`[StockImage AI Selector] AI chose image index ${index} for "${keyword}"`);
+      return index;
+    }
+  } catch (err: any) {
+    console.warn(`[StockImage AI Selector] AI matching failed: ${err.message}. Falling back to local ranking.`);
+  }
+  return null;
+}
+
+/**
  * Fetches search results from a specific stock photo provider, ranks them,
  * and returns the best image URL.
  */
-async function fetchFromProvider(keyword: string, provider: number): Promise<string> {
+async function fetchFromProvider(
+  keyword: string,
+  provider: number,
+  aiConfig?: { provider: string; apiKey: string }
+): Promise<string> {
   const keywordWords = getKeywordWords(keyword);
-  // If the query is empty after filtering stop words, use the original keyword
   const searchQueries = keywordWords.length > 0 ? [keywordWords.join(' '), keyword] : [keyword];
 
   if (provider === 3) {
@@ -55,7 +105,6 @@ async function fetchFromProvider(keyword: string, provider: number): Promise<str
       throw new Error('Unsplash Access Key is not configured');
     }
 
-    // Try with filtered query first, fallback to original keyword if no results
     for (const query of searchQueries) {
       try {
         const response = await axios.get(
@@ -68,7 +117,21 @@ async function fetchFromProvider(keyword: string, provider: number): Promise<str
 
         const results = response.data?.results || [];
         if (results.length > 0) {
-          // Rank by relevance
+          // If AI config is provided, try semantic matching first
+          if (aiConfig) {
+            const candidates = results.map((photo: any) => ({
+              alt: photo.alt_description || '',
+              description: photo.description || '',
+              tags: (photo.tags || []).map((t: any) => t.title || '').join(', ')
+            }));
+            const bestIndex = await scoreCandidatesWithAI(keyword, candidates, aiConfig);
+            if (bestIndex !== null) {
+              const finalUrl = results[bestIndex].urls?.regular || results[bestIndex].urls?.full;
+              if (finalUrl) return finalUrl;
+            }
+          }
+
+          // Local fallback ranking
           let bestPhoto = results[0];
           let maxScore = -1;
           for (const photo of results) {
@@ -88,7 +151,6 @@ async function fetchFromProvider(keyword: string, provider: number): Promise<str
         }
       } catch (err: any) {
         console.warn(`[Unsplash Search] Query "${query}" failed:`, err.message);
-        // If it's a authorization or rate limit error, propagate it immediately to trigger fallback
         if (err.response?.status === 401 || err.response?.status === 403) {
           throw new Error(`Unsplash API authorization or rate limit error: ${err.message}`);
         }
@@ -117,6 +179,20 @@ async function fetchFromProvider(keyword: string, provider: number): Promise<str
 
         const photos = response.data?.photos || [];
         if (photos.length > 0) {
+          // If AI config is provided, try semantic matching first
+          if (aiConfig) {
+            const candidates = photos.map((photo: any) => ({
+              alt: photo.alt || '',
+              description: photo.url || '',
+              tags: ''
+            }));
+            const bestIndex = await scoreCandidatesWithAI(keyword, candidates, aiConfig);
+            if (bestIndex !== null) {
+              const finalUrl = photos[bestIndex].src?.large2x || photos[bestIndex].src?.large || photos[bestIndex].src?.original;
+              if (finalUrl) return finalUrl;
+            }
+          }
+
           let bestPhoto = photos[0];
           let maxScore = -1;
           for (const photo of photos) {
@@ -160,6 +236,20 @@ async function fetchFromProvider(keyword: string, provider: number): Promise<str
 
         const hits = response.data?.hits || [];
         if (hits.length > 0) {
+          // If AI config is provided, try semantic matching first
+          if (aiConfig) {
+            const candidates = hits.map((hit: any) => ({
+              alt: hit.tags || '',
+              description: hit.tags || '',
+              tags: hit.tags || ''
+            }));
+            const bestIndex = await scoreCandidatesWithAI(keyword, candidates, aiConfig);
+            if (bestIndex !== null) {
+              const finalUrl = hits[bestIndex].largeImageURL || hits[bestIndex].webformatURL;
+              if (finalUrl) return finalUrl;
+            }
+          }
+
           let bestPhoto = hits[0];
           let maxScore = -1;
           for (const hit of hits) {
@@ -191,9 +281,11 @@ async function fetchFromProvider(keyword: string, provider: number): Promise<str
  * Implements a smart fallback chain starting with the chosen provider.
  * Returns the local file path.
  */
-export async function getStockImage(keyword: string, provider: number): Promise<string> {
-  // provider: 2 = Pexels, 3 = Unsplash, 4 = Pixabay
-  // Unsplash (3) is prioritized by default.
+export async function getStockImage(
+  keyword: string, 
+  provider: number, 
+  aiConfig?: { provider: string; apiKey: string }
+): Promise<string> {
   let chain: number[] = [];
   if (provider === 3) {
     chain = [3, 2, 4]; // Unsplash -> Pexels -> Pixabay
@@ -211,7 +303,7 @@ export async function getStockImage(keyword: string, provider: number): Promise<
   for (const prov of chain) {
     try {
       console.log(`[StockImage] Trying stock provider ${prov} for keyword: "${keyword}"`);
-      acquiredUrl = await fetchFromProvider(keyword, prov);
+      acquiredUrl = await fetchFromProvider(keyword, prov, aiConfig);
       if (acquiredUrl) {
         console.log(`[StockImage] Successfully acquired image from provider ${prov}: ${acquiredUrl}`);
         break;
@@ -226,7 +318,6 @@ export async function getStockImage(keyword: string, provider: number): Promise<
     throw new Error(`All stock image providers failed to retrieve an image. Details: [${errors.join('; ')}]`);
   }
   
-  // Download the acquired image url to a local temp file
   return await downloadImage(acquiredUrl);
 }
 

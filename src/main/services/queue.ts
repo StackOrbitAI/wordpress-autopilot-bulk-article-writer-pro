@@ -387,7 +387,7 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
             localImagePath = await generateFeaturedImage(imgKeyConfig, keyword, job.image_size, style, imageModel);
           } else {
             // Stock image retrieval (2 = Pexels, 3 = Unsplash, 4 = Pixabay)
-            localImagePath = await getStockImage(keyword, job.image_generation);
+            localImagePath = await getStockImage(parsedTitle || keyword, job.image_generation, aiConfig);
           }
           await this.log(taskId, jobId, 'info', `Featured image acquired successfully. Uploading to WordPress...`);
 
