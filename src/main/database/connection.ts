@@ -115,6 +115,16 @@ async function runMigrations(): Promise<void> {
       console.warn('[Database] Migration warning (adding retries column):', err.message);
     }
   }
+
+  // Custom migration for image_model column in tasks table
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN image_model TEXT DEFAULT 'gpt-image-2'`);
+    console.log('[Database] Migration: Added image_model column to tasks table successfully.');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[Database] Migration warning (adding image_model column):', err.message);
+    }
+  }
 }
 
 // Close database connection

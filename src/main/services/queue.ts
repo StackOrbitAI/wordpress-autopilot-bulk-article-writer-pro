@@ -4,6 +4,7 @@ import { dbRun, dbGet, dbAll } from '../database/connection';
 import { generateArticle, generateFeaturedImage, AIProviderConfig } from './ai';
 import { createWordPressPost, uploadWordPressMedia, WordPressSiteConfig, PostPayload } from './wordpress';
 import { decrypt } from './security';
+import { getStockImage } from './stockImage';
 
 export interface QueueStatus {
   taskId: number;
@@ -186,7 +187,7 @@ class QueueManager {
       const placeHolders = activeTaskIds.map(() => '?').join(',');
       const job = await dbGet(
         `SELECT j.*, t.provider_id, t.model, t.website_id, t.language, t.country, t.category, 
-                t.prompt_template, t.image_generation, t.image_style, t.image_size, t.article_length, 
+                t.prompt_template, t.image_generation, t.image_style, t.image_size, t.image_model, t.article_length, 
                 t.publishing_mode, t.seo_settings
          FROM jobs j
          JOIN tasks t ON j.task_id = t.id
@@ -273,9 +274,38 @@ class QueueManager {
         password: decryptedWpPassword
       };
 
-      // 3. Setup prompt
       const promptTemplate = job.prompt_template || 
-        "Write an exhaustive, SEO optimized blog post about: {keyword}. Include H2/H3 subheadings, lists, and a table if helpful. Target length is {length}.";
+        `Write an in-depth, captivating, and well-researched blog post of 2,000–3,000 words on {keyword}. The content should be written in a natural, human tone, engaging the reader through storytelling, personal anecdotes, and clear examples.
+
+Ensure the post is rich in value, covering every aspect of the topic from different perspectives, offering expert insights, analysis, and actionable advice. While writing, naturally incorporate strong E-E-A-T principles by demonstrating real-life experience, expert-backed insights, credible research support, and trustworthy guidance that aligns with Google's quality standards. The writing should flow seamlessly, with easy-to-follow subheadings, bullet points, and unique markdown formatting to enhance readability, without Separator in paragraph.
+
+Incorporate outbound links to authoritative websites and resources within each paragraph and heading to support key points and improve SEO. Avoid jargon and keep the language conversational and relatable, making the content both informative and entertaining. Ensure the content reflects high levels of experience, expertise, authoritativeness, and trustworthiness in every section to build credibility and create a strong E-E-A-T foundation.
+
+For outbound links, include 8 to 10 high-quality references from authoritative sources within the content. Do not list these links separately; instead, naturally integrate them within different paragraphs by hyperlinking relevant keywords or phrases. Avoid using direct URLs. The links should add value and credibility without overwhelming the content.
+
+Include a comparison table (with an attractive heading) to illustrate key points, as well as a detailed FAQ section to address common questions. End with a long, well-rounded conclusion that ties the content together and offers next steps or reflections for the reader.
+Make sure the article is plagiarism-free and SEO-optimized.
+I also want my blogs to be written specifically for getting AdSense approval, so there should not be any issues like policy violations or low-value content. Please make sure the blogs are high-value and completely free from any kind of policy violation, and ensure the writing follows strong E-E-A-T standards to maximize trustworthiness and AdSense compatibility.
+
+Important Instruction:
+
+The final blog content must ONLY discuss the topic itself.
+Do NOT mention, reference, explain, or hint at this prompt, instructions, writing guidelines, SEO rules, E-E-A-T terms, AdSense approval, or any meta/process-related information anywhere in the blog content.
+
+➕ ADDITIONAL BUYER REQUIREMENTS
+
+Add the following conditions while writing the blog:
+
+The content must not feel AI-generated and should read like it is written by a knowledgeable human subject-matter expert
+
+Do NOT use first-person storytelling or personal anecdotes such as “I’ll never forget…”, “I once saw…”, “my neighbor”, or similar narrative-style experiences
+
+Do NOT include fictional characters, names, or repeated story examples (for example, recurring names like “Sarah” or invented scenarios)
+
+All examples must be neutral, factual, topic-focused, and informational, written in an objective third-person tone
+Avoid emotional storytelling meant to simulate human experience; instead, rely on real-world context, practical explanations, observed patterns, and credible references
+
+Keep examples varied, realistic, and directly relevant to the topic, without templated storytelling formats`;
       
       const customPrompt = promptTemplate
         .replace(/{keyword}/g, keyword)
@@ -322,36 +352,52 @@ class QueueManager {
       let localImagePath = '';
       let uploadedImageUrl = '';
 
-      if (job.image_generation === 1) {
-        await this.log(taskId, jobId, 'info', `Generating featured image...`);
+      if (job.image_generation > 0) {
+        const isAI = job.image_generation === 1;
+        await this.log(taskId, jobId, 'info', isAI ? `Generating featured image...` : `Fetching stock image...`);
         try {
-          // Find OpenAI key for DALL-E (fallback if main provider is Gemini/Claude)
-          let imgKeyConfig = aiConfig;
-          if (provider.provider !== 'openai') {
-            const oaiKey = await dbGet(`SELECT * FROM api_keys WHERE provider = 'openai' LIMIT 1`);
-            if (oaiKey) {
-              imgKeyConfig = {
-                provider: 'openai',
-                apiKey: decrypt(oaiKey.api_key)
-              };
-            } else {
-              throw new Error('Image generation enabled but no OpenAI API key found');
+          if (isAI) {
+            // Find OpenAI key for DALL-E (fallback if main provider is Gemini/Claude)
+            let imgKeyConfig = aiConfig;
+            if (provider.provider !== 'openai') {
+              const oaiKey = await dbGet(`SELECT * FROM api_keys WHERE provider = 'openai' LIMIT 1`);
+              if (oaiKey) {
+                imgKeyConfig = {
+                  provider: 'openai',
+                  apiKey: decrypt(oaiKey.api_key)
+                };
+              } else {
+                throw new Error('AI image generation enabled but no OpenAI API key found');
+              }
             }
+
+            // Parse model and style from task's image_style if it is a JSON string
+            let style = job.image_style || 'photorealistic';
+            let imageModel = 'gpt-image-2';
+            if (style.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(style);
+                style = parsed.style || 'photorealistic';
+                imageModel = parsed.model || 'gpt-image-2';
+              } catch (e) {
+                // ignore
+              }
+            }
+
+            localImagePath = await generateFeaturedImage(imgKeyConfig, keyword, job.image_size, style, imageModel);
+          } else {
+            // Stock image retrieval (2 = Pexels, 3 = Unsplash, 4 = Pixabay)
+            localImagePath = await getStockImage(keyword, job.image_generation);
           }
-
-          // Read image_model from global settings (default: gpt-image-2)
-          const imageModelSetting = await dbGet(`SELECT value FROM settings WHERE key = 'image_model'`);
-          const imageModel = imageModelSetting?.value || 'gpt-image-2';
-
-          localImagePath = await generateFeaturedImage(imgKeyConfig, keyword, job.image_size, job.image_style, imageModel);
-          await this.log(taskId, jobId, 'info', `Featured image generated successfully. Uploading to WordPress...`);
+          await this.log(taskId, jobId, 'info', `Featured image acquired successfully. Uploading to WordPress...`);
 
           const media = await uploadWordPressMedia(wpConfig, localImagePath, keyword);
           featuredImageId = media.id;
           uploadedImageUrl = media.url;
           await this.log(taskId, jobId, 'info', `Image uploaded. Media ID: ${media.id}`);
         } catch (imgErr: any) {
-          await this.log(taskId, jobId, 'warn', `Image generation/upload failed: ${imgErr.message}. Proceeding without image.`);
+          await this.log(taskId, jobId, 'error', `Image acquisition/upload failed: ${imgErr.message}`);
+          throw new Error(`Featured image processing failed: ${imgErr.message}`);
         } finally {
           // Clean up local temp image file
           if (localImagePath && fs.existsSync(localImagePath)) {
@@ -556,34 +602,37 @@ function buildHtmlTable(headers: string[], rows: string[][], alignments: ('left'
 
 // Simple Markdown to HTML converter to format content for WordPress REST API
 function markdownToHtml(markdown: string): string {
-  let html = markdown;
+  if (!markdown) return '';
+  // Normalize Windows/macOS line endings
+  let html = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   // Code blocks
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
   
   // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/`([^`\n]+?)`/g, '<code>$1</code>');
 
-  // Headings H3
-  html = html.replace(/^[ \t]*###[ \t]+([^\r\n]+)$/gm, '<h3>$1</h3>');
+  // Headings H6 down to H1 (using non-greedy line parsing)
+  html = html.replace(/^[ \t]*######[ \t]+([^\n]+?)[ \t]*$/gm, '<h6>$1</h6>');
+  html = html.replace(/^[ \t]*#####[ \t]+([^\n]+?)[ \t]*$/gm, '<h5>$1</h5>');
+  html = html.replace(/^[ \t]*####[ \t]+([^\n]+?)[ \t]*$/gm, '<h4>$1</h4>');
+  html = html.replace(/^[ \t]*###[ \t]+([^\n]+?)[ \t]*$/gm, '<h3>$1</h3>');
+  html = html.replace(/^[ \t]*##[ \t]+([^\n]+?)[ \t]*$/gm, '<h2>$1</h2>');
+  html = html.replace(/^[ \t]*#[ \t]+([^\n]+?)[ \t]*$/gm, '<h1>$1</h1>');
+
+  // Bold (**bold** and __bold__)
+  html = html.replace(/\*\*([^\n*]+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^\n_]+?)__/g, '<strong>$1</strong>');
   
-  // Headings H2
-  html = html.replace(/^[ \t]*##[ \t]+([^\r\n]+)$/gm, '<h2>$1</h2>');
-
-  // Headings H1 (if any remaining)
-  html = html.replace(/^[ \t]*#[ \t]+([^\r\n]+)$/gm, '<h1>$1</h1>');
-
-  // Bold
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  
-  // Italic
-  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  // Italic (*italic* and _italic_)
+  html = html.replace(/\*([^\n*]+?)\*/g, '<em>$1</em>');
+  html = html.replace(/_([^\n_]+?)_/g, '<em>$1</em>');
 
   // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  html = html.replace(/\[([^\n\]]+?)\]\(([^\n)]+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
   // Blockquotes
-  html = html.replace(/^[ \t]*>[ \t]+([^\r\n]+)$/gm, '<blockquote>$1</blockquote>');
+  html = html.replace(/^[ \t]*>[ \t]+([^\n]+)$/gm, '<blockquote>$1</blockquote>');
 
   // Tables
   html = parseMarkdownTables(html);
@@ -594,7 +643,7 @@ function markdownToHtml(markdown: string): string {
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    const isUnordered = line.startsWith('- ') || line.startsWith('* ');
+    const isUnordered = line.startsWith('- ') || line.startsWith('* ') || line.startsWith('+ ');
     const isOrdered = /^\d+\.\s+/.test(line);
     
     if (isUnordered) {

@@ -44,6 +44,7 @@ export const SCHEMA_TABLES = [
     image_generation INTEGER DEFAULT 0,
     image_style TEXT DEFAULT 'photorealistic',
     image_size TEXT DEFAULT '1200x628',
+    image_model TEXT DEFAULT 'gpt-image-2',
     article_length TEXT DEFAULT 'medium',
     publishing_mode TEXT DEFAULT 'draft', -- draft, pending, publish, schedule
     seo_settings TEXT, -- JSON structure
@@ -102,5 +103,8 @@ export const SEED_DATA = [
   `INSERT OR IGNORE INTO settings (key, value) VALUES ('api_timeout', '60000')`,
   `INSERT OR IGNORE INTO settings (key, value) VALUES ('retry_count', '3')`,
   `INSERT OR IGNORE INTO settings (key, value) VALUES ('language', 'en')`,
-  `INSERT OR IGNORE INTO settings (key, value) VALUES ('license_status', 'unactivated')`
+  `INSERT OR IGNORE INTO settings (key, value) VALUES ('license_status', 'unactivated')`,
+  `INSERT OR IGNORE INTO settings (key, value) VALUES ('pexels_api_key', '')`,
+  `INSERT OR IGNORE INTO settings (key, value) VALUES ('unsplash_api_key', '')`,
+  `INSERT OR IGNORE INTO settings (key, value) VALUES ('pixabay_api_key', '')`
 ];

@@ -55,8 +55,11 @@ function getHeaders(authHeader: string, extraHeaders: Record<string, string> = {
   };
 }
 
-// Generate basic authentication header
+// Generate basic or Bearer authentication header
 function getAuthHeader(config: WordPressSiteConfig): string {
+  if (config.password && (config.password.startsWith('Bearer ') || config.password.length > 50)) {
+    return config.password.startsWith('Bearer ') ? config.password : `Bearer ${config.password}`;
+  }
   const token = Buffer.from(`${config.username}:${config.password}`).toString('base64');
   return `Basic ${token}`;
 }
@@ -113,13 +116,32 @@ async function makeWordPressRequest(
   const authHeader = getAuthHeader(config);
   const headers = getHeaders(authHeader, axiosConfigExtra.headers || {});
 
-  // Determine standard and fallback REST URL options
-  const endpoints = [
+  // Determine if it is a WordPress.com URL
+  let host = '';
+  try {
+    host = new URL(baseUrl).hostname;
+  } catch (urlErr) {
+    host = baseUrl.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+  }
+  const isWordPressCom = host.endsWith('.wordpress.com') || baseUrl.includes('wordpress.com');
+
+  const endpoints: { type: string; url: string }[] = [];
+
+  if (isWordPressCom) {
+    const cleanPath = path.startsWith('/wp/v2') ? path.substring(6) : path;
+    endpoints.push({
+      type: 'wp_com_public',
+      url: `https://public-api.wordpress.com/wp/v2/sites/${host}${cleanPath}`
+    });
+  }
+
+  // Standard and index/param fallbacks
+  endpoints.push(
     { type: 'standard', url: `${baseUrl}/wp-json${path}` },
     { type: 'index_json', url: `${baseUrl}/index.php/wp-json${path}` },
     { type: 'param', url: baseUrl.includes('?') ? `${baseUrl}&rest_route=${path}` : `${baseUrl}/?rest_route=${path}` },
     { type: 'index_param', url: baseUrl.includes('?') ? `${baseUrl}&rest_route=${path}` : `${baseUrl}/index.php?rest_route=${path}` }
-  ];
+  );
 
   let lastError: any = null;
 
@@ -141,7 +163,7 @@ async function makeWordPressRequest(
         ...axiosConfigExtra,
         url: finalUrl,
         headers,
-        params: (endpoint.type === 'standard' || endpoint.type === 'index_json') ? axiosConfigExtra.params : undefined,
+        params: (endpoint.type === 'standard' || endpoint.type === 'index_json' || endpoint.type === 'wp_com_public') ? axiosConfigExtra.params : undefined,
         timeout: 30000
       });
 
@@ -187,7 +209,7 @@ export async function testWordPressConnection(config: WordPressSiteConfig): Prom
 }
 
 /**
- * Finds a category by slug or creates it if missing.
+ * Finds a category by slug or name, preventing automatic creation of new categories.
  */
 export async function findOrCreateCategory(
   config: WordPressSiteConfig,
@@ -195,26 +217,51 @@ export async function findOrCreateCategory(
 ): Promise<number | null> {
   if (!categoryName) return null;
   const name = categoryName.trim();
-  const slug = encodeURIComponent(name.toLowerCase().replace(/\s+/g, '-'));
+  const cleanSlug = name.toLowerCase().replace(/\s+/g, '-');
 
   try {
-    // 1. Search for existing category
+    // 1. Search in-memory by fetching categories (very reliable for first 100)
+    try {
+      const existingCats = await getWordPressCategories(config);
+      if (Array.isArray(existingCats)) {
+        const match = existingCats.find(
+          cat => cat.name.toLowerCase() === name.toLowerCase() || 
+                 cat.slug.toLowerCase() === cleanSlug.toLowerCase()
+        );
+        if (match) {
+          console.log(`[WordPress] Category '${categoryName}' matched in-memory to ID ${match.id}`);
+          return match.id;
+        }
+      }
+    } catch (fetchErr: any) {
+      console.warn(`[WordPress] Failed to fetch category list for in-memory match:`, fetchErr.message);
+    }
+
+    // 2. Search fallback via API querying by slug (without pre-encoding so axios does it)
     const searchResponse = await makeWordPressRequest(config, '/wp/v2/categories', {
       method: 'get',
-      params: { slug }
+      params: { slug: cleanSlug }
     });
 
     if (searchResponse.data && searchResponse.data.length > 0) {
       return searchResponse.data[0].id;
     }
 
-    // 2. Create category if not found
-    const createResponse = await makeWordPressRequest(config, '/wp/v2/categories', {
-      method: 'post',
-      data: { name, slug }
+    // 3. Search fallback via API querying by search term
+    const searchByNameResponse = await makeWordPressRequest(config, '/wp/v2/categories', {
+      method: 'get',
+      params: { search: name }
     });
 
-    return createResponse.data?.id || null;
+    if (searchByNameResponse.data && searchByNameResponse.data.length > 0) {
+      const exactMatch = searchByNameResponse.data.find(
+        (cat: any) => cat.name.toLowerCase() === name.toLowerCase()
+      );
+      if (exactMatch) return exactMatch.id;
+    }
+
+    console.warn(`[WordPress] Category '${categoryName}' not found. Returning null (will not create new category per user preference).`);
+    return null;
   } catch (err: any) {
     console.warn(`[WordPress] Error mapping category '${categoryName}':`, err.message);
     return null;

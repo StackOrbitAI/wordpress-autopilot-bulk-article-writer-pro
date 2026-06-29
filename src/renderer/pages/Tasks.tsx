@@ -55,15 +55,47 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordsText, setKeywordsText] = useState('');
   const [promptTemplate, setPromptTemplate] = useState(
-    "Write an exhaustive, SEO optimized blog post about: {keyword}. Include H2/H3 subheadings, lists, and a table if helpful. Target length is {length}."
+    `Write an in-depth, captivating, and well-researched blog post of 2,000–3,000 words on {keyword}. The content should be written in a natural, human tone, engaging the reader through storytelling, personal anecdotes, and clear examples.
+
+Ensure the post is rich in value, covering every aspect of the topic from different perspectives, offering expert insights, analysis, and actionable advice. While writing, naturally incorporate strong E-E-A-T principles by demonstrating real-life experience, expert-backed insights, credible research support, and trustworthy guidance that aligns with Google's quality standards. The writing should flow seamlessly, with easy-to-follow subheadings, bullet points, and unique markdown formatting to enhance readability, without Separator in paragraph.
+
+Incorporate outbound links to authoritative websites and resources within each paragraph and heading to support key points and improve SEO. Avoid jargon and keep the language conversational and relatable, making the content both informative and entertaining. Ensure the content reflects high levels of experience, expertise, authoritativeness, and trustworthiness in every section to build credibility and create a strong E-E-A-T foundation.
+
+For outbound links, include 8 to 10 high-quality references from authoritative sources within the content. Do not list these links separately; instead, naturally integrate them within different paragraphs by hyperlinking relevant keywords or phrases. Avoid using direct URLs. The links should add value and credibility without overwhelming the content.
+
+Include a comparison table (with an attractive heading) to illustrate key points, as well as a detailed FAQ section to address common questions. End with a long, well-rounded conclusion that ties the content together and offers next steps or reflections for the reader.
+Make sure the article is plagiarism-free and SEO-optimized.
+I also want my blogs to be written specifically for getting AdSense approval, so there should not be any issues like policy violations or low-value content. Please make sure the blogs are high-value and completely free from any kind of policy violation, and ensure the writing follows strong E-E-A-T standards to maximize trustworthiness and AdSense compatibility.
+
+Important Instruction:
+
+The final blog content must ONLY discuss the topic itself.
+Do NOT mention, reference, explain, or hint at this prompt, instructions, writing guidelines, SEO rules, E-E-A-T terms, AdSense approval, or any meta/process-related information anywhere in the blog content.
+
+➕ ADDITIONAL BUYER REQUIREMENTS
+
+Add the following conditions while writing the blog:
+
+The content must not feel AI-generated and should read like it is written by a knowledgeable human subject-matter expert
+
+Do NOT use first-person storytelling or personal anecdotes such as “I’ll never forget…”, “I once saw…”, “my neighbor”, or similar narrative-style experiences
+
+Do NOT include fictional characters, names, or repeated story examples (for example, recurring names like “Sarah” or invented scenarios)
+
+All examples must be neutral, factual, topic-focused, and informational, written in an objective third-person tone
+Avoid emotional storytelling meant to simulate human experience; instead, rely on real-world context, practical explanations, observed patterns, and credible references
+
+Keep examples varied, realistic, and directly relevant to the topic, without templated storytelling formats`
   );
   const [providerId, setProviderId] = useState('');
   const [model, setModel] = useState('');
-  const [imageGeneration, setImageGeneration] = useState(true);
+  const [isCustomModel, setIsCustomModel] = useState<boolean>(false);
+  const [imageGeneration, setImageGeneration] = useState<number>(1);
   const [imageStyle, setImageStyle] = useState('photorealistic');
   const [imageSize, setImageSize] = useState('1200x628');
+  const [imageModel, setImageModel] = useState('gpt-image-2');
   const [articleLength, setArticleLength] = useState('medium');
-  const [publishingMode, setPublishingMode] = useState<'draft' | 'pending' | 'publish' | 'future'>('draft');
+  const [publishingMode, setPublishingMode] = useState<'draft' | 'pending' | 'publish' | 'future'>('publish');
   const [seoPlugin, setSeoPlugin] = useState<'yoast' | 'rankmath' | 'aioseo' | 'none'>('yoast');
   const [isScheduled, setIsScheduled] = useState(false);
   
@@ -129,6 +161,62 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
       const lastWebId = savedSettings.find((s: any) => s.key === 'last_selected_website')?.value;
       const lastCat = savedSettings.find((s: any) => s.key === 'last_selected_category')?.value;
 
+      const defaultsStr = localStorage.getItem('task_defaults');
+      if (defaultsStr) {
+        try {
+          const d = JSON.parse(defaultsStr);
+          if (d.websiteId && webs.some(w => w.id.toString() === d.websiteId)) {
+            setWebsiteId(d.websiteId);
+          } else if (lastWebId && webs.some(w => w.id.toString() === lastWebId)) {
+            setWebsiteId(lastWebId);
+          } else if (webs.length > 0) {
+            setWebsiteId(webs[0].id.toString());
+          }
+          
+          if (d.selectedCategories && d.selectedCategories.length > 0) {
+            setSelectedCategories(d.selectedCategories);
+          } else if (lastCat) {
+            setSelectedCategories(lastCat.split(',').map(c => c.trim()).filter(Boolean));
+          }
+          
+          setPromptTemplate(d.promptTemplate || '');
+          
+          if (d.providerId && provs.some(p => p.id.toString() === d.providerId)) {
+            setProviderId(d.providerId);
+            const selected = provs.find(p => p.id.toString() === d.providerId);
+            const models = JSON.parse(selected?.models || '[]');
+            if (d.model && (models.includes(d.model) || d.isCustomModel)) {
+              setIsCustomModel(!!d.isCustomModel);
+              setModel(d.model);
+            } else if (models.length > 0) {
+              setIsCustomModel(false);
+              setModel(models[0]);
+            }
+          } else if (provs.length > 0) {
+            const defaultProv = provs.find((p: any) => p.is_default === 1) || provs[0];
+            setProviderId(defaultProv.id.toString());
+            const models = JSON.parse(defaultProv.models || '[]');
+            if (models.length > 0) {
+              setIsCustomModel(false);
+              setModel(models[0]);
+            }
+          }
+          
+          setImageGeneration(d.imageGeneration !== undefined ? d.imageGeneration : 1);
+          setImageStyle(d.imageStyle || 'photorealistic');
+          setImageSize(d.imageSize || '1200x628');
+          setImageModel(d.imageModel || 'gpt-image-2');
+          setArticleLength(d.articleLength || 'medium');
+          setPublishingMode(d.publishingMode || 'publish');
+          setSeoPlugin(d.seoPlugin || 'yoast');
+          setIsScheduled(d.isScheduled || false);
+          setScheduleFrequency(d.scheduleFrequency || 'once');
+          return;
+        } catch (e) {
+          console.error('Error loading task defaults in fetchDependencies:', e);
+        }
+      }
+
       if (lastWebId && webs.some(w => w.id.toString() === lastWebId)) {
         setWebsiteId(lastWebId);
       } else if (webs.length > 0) {
@@ -140,8 +228,10 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
       }
       
       if (provs.length > 0) {
-        setProviderId(provs[0].id.toString());
-        const models = JSON.parse(provs[0].models || '[]');
+        const defaultProv = provs.find((p: any) => p.is_default === 1);
+        const selectedProv = defaultProv || provs[0];
+        setProviderId(selectedProv.id.toString());
+        const models = JSON.parse(selectedProv.models || '[]');
         if (models.length > 0) {
           const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
           if (gpt4oIndex !== -1) {
@@ -385,9 +475,10 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
         promptTemplate: task.prompt_template,
         providerId: task.provider_id,
         model: task.model,
-        imageGeneration: task.image_generation === 1,
+        imageGeneration: task.image_generation || 0,
         imageStyle: task.image_style,
         imageSize: task.image_size,
+        imageModel: task.image_model || 'gpt-image-2',
         articleLength: task.article_length,
         publishingMode: task.publishing_mode,
         seoSettings: JSON.parse(task.seo_settings || '{}'),
@@ -434,12 +525,31 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
     setKeywords(JSON.parse(task.keywords || '[]'));
     setPromptTemplate(task.prompt_template);
     setProviderId(task.provider_id.toString());
+    const selectedProvider = providers.find(p => p.id.toString() === task.provider_id.toString());
+    const standardModels = selectedProvider ? JSON.parse(selectedProvider.models || '[]') : [];
+    if (task.model && !standardModels.includes(task.model)) {
+      setIsCustomModel(true);
+    } else {
+      setIsCustomModel(false);
+    }
     setModel(task.model);
-    setImageGeneration(task.image_generation === 1);
-    setImageStyle(task.image_style || 'photorealistic');
+    setImageGeneration(task.image_generation || 0);
+    let styleVal = task.image_style || 'photorealistic';
+    let modelVal = 'gpt-image-2';
+    if (styleVal.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(styleVal);
+        styleVal = parsed.style || 'photorealistic';
+        modelVal = parsed.model || 'gpt-image-2';
+      } catch (e) {
+        // ignore
+      }
+    }
+    setImageStyle(styleVal);
+    setImageModel(modelVal);
     setImageSize(task.image_size || '1200x628');
     setArticleLength(task.article_length || 'medium');
-    setPublishingMode(task.publishing_mode || 'draft');
+    setPublishingMode(task.publishing_mode || 'publish');
     
     const seo = JSON.parse(task.seo_settings || '{}');
     setSeoPlugin(seo.plugin || 'yoast');
@@ -477,24 +587,110 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
     setEditingTaskId(null);
     setStep(1);
     setName('');
-    if (websites.length > 0) setWebsiteId(websites[0].id.toString());
-    setSelectedCategories([]);
     setCategoryQuery('');
     setKeywords([]);
-    setPromptTemplate("Write an exhaustive, SEO optimized blog post about: {keyword}. Include H2/H3 subheadings, lists, and a table if helpful. Target length is {length}.");
-    if (providers.length > 0) setProviderId(providers[0].id.toString());
-    setImageGeneration(true);
-    setImageStyle('photorealistic');
-    setImageSize('1200x628');
-    setArticleLength('medium');
-    setPublishingMode('draft');
-    setSeoPlugin('yoast');
-    setIsScheduled(false);
     setScheduleDate('');
     setScheduleTime('');
-    setScheduleFrequency('once');
     setFormError('');
     localStorage.removeItem('task_wizard_draft');
+
+    const defaultsStr = localStorage.getItem('task_defaults');
+    if (defaultsStr) {
+      try {
+        const d = JSON.parse(defaultsStr);
+        if (d.websiteId && websites.some(w => w.id.toString() === d.websiteId)) {
+          setWebsiteId(d.websiteId);
+        } else if (websites.length > 0) {
+          setWebsiteId(websites[0].id.toString());
+        }
+        
+        setSelectedCategories(d.selectedCategories || []);
+        setPromptTemplate(d.promptTemplate || '');
+        
+        if (d.providerId && providers.some(p => p.id.toString() === d.providerId)) {
+          setProviderId(d.providerId);
+          const selected = providers.find(p => p.id.toString() === d.providerId);
+          const models = JSON.parse(selected?.models || '[]');
+          if (d.model && (models.includes(d.model) || d.isCustomModel)) {
+            setIsCustomModel(!!d.isCustomModel);
+            setModel(d.model);
+          } else if (models.length > 0) {
+            setIsCustomModel(false);
+            setModel(models[0]);
+          }
+        } else if (providers.length > 0) {
+          const defaultProv = providers.find((p: any) => p.is_default === 1) || providers[0];
+          setProviderId(defaultProv.id.toString());
+          const models = JSON.parse(defaultProv.models || '[]');
+          if (models.length > 0) {
+            setIsCustomModel(false);
+            setModel(models[0]);
+          }
+        }
+        
+        setImageGeneration(d.imageGeneration !== undefined ? d.imageGeneration : 1);
+        setIsCustomModel(d.isCustomModel !== undefined ? d.isCustomModel : false);
+        setImageStyle(d.imageStyle || 'photorealistic');
+        setImageSize(d.imageSize || '1200x628');
+        setImageModel(d.imageModel || 'gpt-image-2');
+        setArticleLength(d.articleLength || 'medium');
+        setPublishingMode(d.publishingMode || 'publish');
+        setSeoPlugin(d.seoPlugin || 'yoast');
+        setIsScheduled(d.isScheduled || false);
+        setScheduleFrequency(d.scheduleFrequency || 'once');
+        return;
+      } catch (err) {
+        console.error('Error loading task defaults in resetForm:', err);
+      }
+    }
+
+    if (websites.length > 0) setWebsiteId(websites[0].id.toString());
+    setSelectedCategories([]);
+    setPromptTemplate(`Write an in-depth, captivating, and well-researched blog post of 2,000–3,000 words on {keyword}. The content should be written in a natural, human tone, engaging the reader through storytelling, personal anecdotes, and clear examples.
+
+Ensure the post is rich in value, covering every aspect of the topic from different perspectives, offering expert insights, analysis, and actionable advice. While writing, naturally incorporate strong E-E-A-T principles by demonstrating real-life experience, expert-backed insights, credible research support, and trustworthy guidance that aligns with Google's quality standards. The writing should flow seamlessly, with easy-to-follow subheadings, bullet points, and unique markdown formatting to enhance readability, without Separator in paragraph.
+
+Incorporate outbound links to authoritative websites and resources within each paragraph and heading to support key points and improve SEO. Avoid jargon and keep the language conversational and relatable, making the content both informative and entertaining. Ensure the content reflects high levels of experience, expertise, authoritativeness, and trustworthiness in every section to build credibility and create a strong E-E-A-T foundation.
+
+For outbound links, include 8 to 10 high-quality references from authoritative sources within the content. Do not list these links separately; instead, naturally integrate them within different paragraphs by hyperlinking relevant keywords or phrases. Avoid using direct URLs. The links should add value and credibility without overwhelming the content.
+
+Include a comparison table (with an attractive heading) to illustrate key points, as well as a detailed FAQ section to address common questions. End with a long, well-rounded conclusion that ties the content together and offers next steps or reflections for the reader.
+Make sure the article is plagiarism-free and SEO-optimized.
+I also want my blogs to be written specifically for getting AdSense approval, so there should not be any issues like policy violations or low-value content. Please make sure the blogs are high-value and completely free from any kind of policy violation, and ensure the writing follows strong E-E-A-T standards to maximize trustworthiness and AdSense compatibility.
+
+Important Instruction:
+
+The final blog content must ONLY discuss the topic itself.
+Do NOT mention, reference, explain, or hint at this prompt, instructions, writing guidelines, SEO rules, E-E-A-T terms, AdSense approval, or any meta/process-related information anywhere in the blog content.
+
+➕ ADDITIONAL BUYER REQUIREMENTS
+
+Add the following conditions while writing the blog:
+
+The content must not feel AI-generated and should read like it is written by a knowledgeable human subject-matter expert
+
+Do NOT use first-person storytelling or personal anecdotes such as “I’ll never forget…”, “I once saw…”, “my neighbor”, or similar narrative-style experiences
+
+Do NOT include fictional characters, names, or repeated story examples (for example, recurring names like “Sarah” or invented scenarios)
+
+All examples must be neutral, factual, topic-focused, and informational, written in an objective third-person tone
+Avoid emotional storytelling meant to simulate human experience; instead, rely on real-world context, practical explanations, observed patterns, and credible references
+
+Keep examples varied, realistic, and directly relevant to the topic, without templated storytelling formats`);
+    if (providers.length > 0) {
+      const defaultProv = providers.find((p: any) => p.is_default === 1);
+      setProviderId(defaultProv ? defaultProv.id.toString() : providers[0].id.toString());
+    }
+    setImageGeneration(1);
+    setIsCustomModel(false);
+    setImageStyle('photorealistic');
+    setImageSize('1200x628');
+    setImageModel('gpt-image-2');
+    setArticleLength('medium');
+    setPublishingMode('publish');
+    setSeoPlugin('yoast');
+    setIsScheduled(false);
+    setScheduleFrequency('once');
   };
 
   const validateStep = (currentStep: number): boolean => {
@@ -502,8 +698,8 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
     switch (currentStep) {
       case 1:
         if (!name.trim()) {
-          setFormError('Pipeline name is required.');
-          return false;
+          const dateStr = new Date().toLocaleDateString();
+          setName(`Bulk Writer - ${dateStr}`);
         }
         if (!websiteId) {
           setFormError('Please select a target WordPress site.');
@@ -548,6 +744,13 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
       return;
     }
 
+    let finalName = name.trim();
+    if (!finalName) {
+      const dateStr = new Date().toLocaleDateString();
+      finalName = `Bulk Writer - ${dateStr}`;
+      setName(finalName);
+    }
+
     let scheduleSettings = {};
     if (isScheduled && scheduleDate && scheduleTime) {
       const scheduleIso = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
@@ -558,7 +761,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
     }
 
     const taskPayload = {
-      name,
+      name: finalName,
       websiteId: parseInt(websiteId, 10),
       language: 'en',
       country: 'us',
@@ -568,7 +771,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
       providerId: parseInt(providerId, 10),
       model,
       imageGeneration,
-      imageStyle,
+      imageStyle: imageGeneration === 1 ? JSON.stringify({ model: imageModel, style: imageStyle }) : imageStyle,
       imageSize,
       articleLength,
       publishingMode: publishingMode === 'future' ? 'future' : publishingMode,
@@ -811,13 +1014,34 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">LLM Model</label>
-                <Select value={model} onChange={(e) => setModel(e.target.value)}>
+                <Select value={isCustomModel ? 'custom' : model} onChange={(e) => {
+                  if (e.target.value === 'custom') {
+                    setIsCustomModel(true);
+                    setModel('');
+                  } else {
+                    setIsCustomModel(false);
+                    setModel(e.target.value);
+                  }
+                }}>
                   {availableModels.map((m: string) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
+                  <option value="custom">✏️ Enter Custom Model ID...</option>
                 </Select>
               </div>
             </div>
+
+            {isCustomModel && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Custom Model ID</label>
+                <Input
+                  placeholder="e.g. google/gemini-2.5-pro, gemini-1.5-pro, or gpt-4o-mini"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="bg-zinc-950 border-zinc-800 font-mono text-xs"
+                />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Custom Prompt Template</label>
@@ -845,23 +1069,36 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
           <div className="space-y-4">
             <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Step 4: Image & SEO Mappings</h4>
             
-            {/* Image generation toggle */}
+            {/* Featured Image Selection */}
             <div className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h5 className="text-xs font-bold text-zinc-200">Featured Image Generation</h5>
-                  <p className="text-[10px] text-zinc-400">Generate featured images dynamically via DALL-E 3</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={imageGeneration}
-                  onChange={(e) => setImageGeneration(e.target.checked)}
-                  className="rounded border-zinc-800 bg-zinc-950 text-indigo-600 focus:ring-indigo-500/30 h-4.5 w-4.5 accent-indigo-600 cursor-pointer"
-                />
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Featured Image Source</label>
+                <Select value={imageGeneration.toString()} onChange={(e) => setImageGeneration(parseInt(e.target.value, 10))}>
+                  <option value="0">None (No Featured Image)</option>
+                  <option value="1">AI Generated (OpenAI DALL-E)</option>
+                  <option value="2">Pexels (Free Stock Photos)</option>
+                  <option value="3">Unsplash (Free Stock Photos)</option>
+                  <option value="4">Pixabay (Free Stock Photos)</option>
+                </Select>
+                <p className="text-[10px] text-zinc-500">
+                  {imageGeneration === 1 && "Generates a custom illustration using OpenAI DALL-E models."}
+                  {imageGeneration === 2 && "Downloads high-resolution free stock photos from Pexels."}
+                  {imageGeneration === 3 && "Downloads high-resolution free stock photos from Unsplash."}
+                  {imageGeneration === 4 && "Downloads high-resolution free stock photos from Pixabay."}
+                  {imageGeneration === 0 && "No featured image will be added to the articles."}
+                </p>
               </div>
 
-              {imageGeneration && (
+              {imageGeneration === 1 && (
                 <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-800/40">
+                  <div className="space-y-1.5 col-span-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">AI Image Model</label>
+                    <Select value={imageModel} onChange={(e) => setImageModel(e.target.value)}>
+                      <option value="gpt-image-2">gpt-image-2 (OpenAI DALL-E 3 - Recommended)</option>
+                      <option value="dall-e-3">dall-e-3 (OpenAI DALL-E 3)</option>
+                      <option value="dall-e-2">dall-e-2 (OpenAI DALL-E 2)</option>
+                    </Select>
+                  </div>
                   <div className="space-y-1.5">
                     <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Aspect Style</label>
                     <Select value={imageStyle} onChange={(e) => setImageStyle(e.target.value)}>
@@ -875,11 +1112,18 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
                   <div className="space-y-1.5">
                     <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Image Resolution</label>
                     <Select value={imageSize} onChange={(e) => setImageSize(e.target.value)}>
-                      <option value="1200x628">1200 × 628 px (WordPress Landscape - Recommended)</option>
-                      <option value="1200x675">1200 × 675 px (WordPress Landscape - Alternative)</option>
+                      <option value="1200x628">1200 × 628 px (WordPress Landscape)</option>
+                      <option value="1200x675">1200 × 675 px (WordPress Landscape - Alt)</option>
                       <option value="1024x1024">1024 × 1024 px (Square)</option>
                     </Select>
                   </div>
+                </div>
+              )}
+
+              {imageGeneration > 1 && (
+                <div className="pt-2 border-t border-zinc-800/40 text-[11px] text-zinc-400 space-y-1">
+                  <p>Images will be searched and downloaded from the selected free stock library automatically using your article keywords.</p>
+                  <p className="text-[10px] text-zinc-500 italic">Make sure to configure the corresponding API Key in Global Settings.</p>
                 </div>
               )}
             </div>
@@ -1287,8 +1531,8 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
             )}
           </div>
 
-          <DialogFooter className="pt-4 border-t border-zinc-800/40 flex justify-between sm:justify-between">
-            <div>
+          <DialogFooter className="pt-4 border-t border-zinc-800/40 flex justify-between sm:justify-between items-center">
+            <div className="flex space-x-2">
               {step > 1 && (
                 <Button
                   type="button"
@@ -1301,6 +1545,38 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   <span>Back</span>
+                </Button>
+              )}
+
+              {!editingTaskId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const defaults = {
+                      websiteId,
+                      selectedCategories,
+                      promptTemplate,
+                      providerId,
+                      model,
+                      isCustomModel,
+                      imageGeneration,
+                      imageStyle,
+                      imageSize,
+                      imageModel,
+                      articleLength,
+                      publishingMode,
+                      seoPlugin,
+                      isScheduled,
+                      scheduleFrequency
+                    };
+                    localStorage.setItem('task_defaults', JSON.stringify(defaults));
+                    alert('Current settings saved as defaults for new tasks!');
+                  }}
+                  className="border-zinc-800 text-zinc-400 hover:text-indigo-400 text-xs h-9"
+                  title="Save current configuration as default for new tasks"
+                >
+                  Save as Defaults
                 </Button>
               )}
             </div>

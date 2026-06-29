@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('api', {
   getApiKeys: () => ipcRenderer.invoke('db:getApiKeys'),
   addApiKey: (key: any) => ipcRenderer.invoke('db:addApiKey', key),
   deleteApiKey: (id: number) => ipcRenderer.invoke('db:deleteApiKey', id),
+  setApiKeyDefault: (id: number) => ipcRenderer.invoke('db:setApiKeyDefault', id),
+  setDefaultApiKey: (id: number) => ipcRenderer.invoke('db:setDefaultApiKey', id),
 
   // Tasks
   getTasks: () => ipcRenderer.invoke('db:getTasks'),

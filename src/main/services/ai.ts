@@ -56,7 +56,7 @@ export async function generateArticle(
   systemInstruction?: string
 ): Promise<GenerationResult> {
   const sysPrompt = systemInstruction || 
-    "You are a professional, human-like SEO writer. Write long-form articles that are highly readable, EEAT-optimized, AdSense-friendly, and naturally structured. Avoid cliché AI phrases (e.g. 'in conclusion', 'delve', 'testament', 'tapestry'). Use markdown headings (H2, H3), bullet points, and clean tables where relevant. Ensure content is helpful and detailed.";
+    "You are a professional, human-like SEO writer. Write long-form articles that are highly readable, EEAT-optimized, AdSense-friendly, and naturally structured. Avoid cliché AI phrases (e.g. 'in conclusion', 'delve', 'testament', 'tapestry'). Use markdown headings (H2, H3), bullet points, and clean tables where relevant. Ensure content is helpful and detailed. Crucial: Make the article's structure, outline, and headings highly specific and tailored to the exact topic. Do NOT use repetitive, generic heading structures (e.g., avoid formulaic structures like 'Understanding [Topic]', 'The Art of [Topic]', or plain 'Introduction' / 'Conclusion'). Create unique, engaging, and context-rich headings for each section to ensure the article stands out as completely unique.";
 
   const provider = config.provider.toLowerCase();
 
@@ -260,7 +260,7 @@ export async function generateFeaturedImage(
     requestBody.quality = 'standard';
   }
 
-  const response = await axios.post(url, requestBody, { headers, timeout: 90000 });
+  const response = await axios.post(url, requestBody, { headers, timeout: 120000 });
 
   const imgData = response.data?.data?.[0];
   if (!imgData) {
@@ -273,6 +273,56 @@ export async function generateFeaturedImage(
     return await downloadImage(imgData.url);
   } else {
     throw new Error('Neither image URL nor base64 data returned from provider');
+  }
+}
+
+/**
+ * Fetches stock images from Pexels or Unsplash and returns the local file path.
+ */
+export async function fetchStockImage(
+  provider: 'pexels' | 'unsplash',
+  query: string,
+  apiKey: string
+): Promise<string> {
+  if (!apiKey) {
+    throw new Error(`API Key / Access Key for ${provider} is missing. Please configure it in Settings.`);
+  }
+
+  if (provider === 'pexels') {
+    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1`;
+    const response = await axios.get(url, {
+      headers: {
+        'Authorization': apiKey
+      },
+      timeout: 15000
+    });
+    const photo = response.data?.photos?.[0];
+    if (!photo) {
+      throw new Error(`No image found on Pexels for query: "${query}"`);
+    }
+    const imageUrl = photo.src?.large2x || photo.src?.large || photo.src?.original;
+    if (!imageUrl) {
+      throw new Error(`Invalid image URL returned from Pexels`);
+    }
+    return await downloadImage(imageUrl);
+  } else {
+    // Unsplash
+    const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1`;
+    const response = await axios.get(url, {
+      headers: {
+        'Authorization': `Client-ID ${apiKey}`
+      },
+      timeout: 15000
+    });
+    const result = response.data?.results?.[0];
+    if (!result) {
+      throw new Error(`No image found on Unsplash for query: "${query}"`);
+    }
+    const imageUrl = result.urls?.regular || result.urls?.full;
+    if (!imageUrl) {
+      throw new Error(`Invalid image URL returned from Unsplash`);
+    }
+    return await downloadImage(imageUrl);
   }
 }
 

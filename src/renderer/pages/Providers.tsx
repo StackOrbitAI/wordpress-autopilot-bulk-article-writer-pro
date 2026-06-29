@@ -24,10 +24,10 @@ const Providers: React.FC = () => {
 
   // Default models list for pre-population
   const defaultModels: Record<string, string[]> = {
-    openai: ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-    gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'],
+    openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-2.5-pro'],
     claude: ['claude-3-5-sonnet-latest', 'claude-3-opus-latest', 'claude-3-haiku-20240307'],
-    openrouter: ['google/gemini-flash-1.5', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3-70b-instruct'],
+    openrouter: ['google/gemini-flash-1.5', 'google/gemini-2.5-flash', 'google/gemini-2.5-pro', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3-70b-instruct'],
     custom: ['gpt-4o-mini', 'deepseek-chat']
   };
 
@@ -113,6 +113,18 @@ const Providers: React.FC = () => {
     }
   };
 
+  const handleSetDefault = async (id: number) => {
+    const api = (window as any).api;
+    if (!api) return;
+    try {
+      await api.setDefaultApiKey(id);
+      fetchKeys();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Failed to set default provider.');
+    }
+  };
+
   return (
     <div className="flex-1 p-8 overflow-y-auto bg-zinc-950 space-y-8">
       <div className="flex items-center justify-between">
@@ -193,7 +205,14 @@ const Providers: React.FC = () => {
                               <span>Default Provider</span>
                             </Badge>
                           ) : (
-                            <span className="text-zinc-600">-</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-[10px] h-6 py-0 px-2 bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                              onClick={() => handleSetDefault(key.id)}
+                            >
+                              Make Default
+                            </Button>
                           )}
                         </td>
                         <td className="p-4 text-right">

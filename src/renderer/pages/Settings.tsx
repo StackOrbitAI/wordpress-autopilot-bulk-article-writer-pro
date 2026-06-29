@@ -22,6 +22,9 @@ const Settings: React.FC = () => {
   const [retryCount, setRetryCount] = useState('3');
   const [proxy, setProxy] = useState('');
   const [imageModel, setImageModel] = useState('gpt-image-2');
+  const [pexelsApiKey, setPexelsApiKey] = useState('');
+  const [unsplashApiKey, setUnsplashApiKey] = useState('');
+  const [pixabayApiKey, setPixabayApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -38,6 +41,9 @@ const Settings: React.FC = () => {
         if (settings.retry_count) setRetryCount(settings.retry_count);
         if (settings.proxy) setProxy(settings.proxy);
         if (settings.image_model) setImageModel(settings.image_model);
+        if (settings.pexels_api_key) setPexelsApiKey(settings.pexels_api_key);
+        if (settings.unsplash_api_key) setUnsplashApiKey(settings.unsplash_api_key);
+        if (settings.pixabay_api_key) setPixabayApiKey(settings.pixabay_api_key);
       } catch (err) {
         console.error(err);
       }
@@ -57,6 +63,9 @@ const Settings: React.FC = () => {
       await api.updateSetting('retry_count', retryCount);
       await api.updateSetting('proxy', proxy);
       await api.updateSetting('image_model', imageModel);
+      await api.updateSetting('pexels_api_key', pexelsApiKey);
+      await api.updateSetting('unsplash_api_key', unsplashApiKey);
+      await api.updateSetting('pixabay_api_key', pixabayApiKey);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -166,9 +175,9 @@ const Settings: React.FC = () => {
             <CardHeader className="border-b border-zinc-800/40 pb-4">
               <CardTitle className="text-sm flex items-center">
                 <ImageIcon className="h-4 w-4 text-indigo-400 mr-2" />
-                AI Image Generation Model
+                Featured Image Settings & Free Stock APIs
               </CardTitle>
-              <CardDescription>Select the model used to generate featured images for articles.</CardDescription>
+              <CardDescription>Configure AI generation models or free stock photo integrations for featured images.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
               <div className="space-y-1.5">
@@ -181,8 +190,58 @@ const Settings: React.FC = () => {
                   <option value="dall-e-2">dall-e-2 (OpenAI — Faster, Lower Cost)</option>
                 </Select>
                 <p className="text-[10px] text-zinc-500">
-                  Requires an OpenAI API key. gpt-image-2 is the latest model and produces the best results for blog featured images.
+                  Used when selecting OpenAI DALL-E image generation in task parameters.
                 </p>
+              </div>
+
+              <div className="border-t border-zinc-800/40 pt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                    Pexels API Key
+                  </label>
+                  <Input 
+                    type="password" 
+                    value={pexelsApiKey} 
+                    onChange={(e) => setPexelsApiKey(e.target.value)} 
+                    placeholder="Enter Pexels API Key" 
+                    className="bg-zinc-950 border-zinc-800 font-mono text-xs"
+                  />
+                  <p className="text-[9px] text-zinc-500">
+                    Get a free API key at <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">pexels.com/api</a>.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                    Unsplash Access Key
+                  </label>
+                  <Input 
+                    type="password" 
+                    value={unsplashApiKey} 
+                    onChange={(e) => setUnsplashApiKey(e.target.value)} 
+                    placeholder="Enter Unsplash Access Key" 
+                    className="bg-zinc-950 border-zinc-800 font-mono text-xs"
+                  />
+                  <p className="text-[9px] text-zinc-500">
+                    Get a free API key at <a href="https://unsplash.com/developers" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">unsplash.com/developers</a>.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                    Pixabay API Key
+                  </label>
+                  <Input 
+                    type="password" 
+                    value={pixabayApiKey} 
+                    onChange={(e) => setPixabayApiKey(e.target.value)} 
+                    placeholder="Enter Pixabay API Key" 
+                    className="bg-zinc-950 border-zinc-800 font-mono text-xs"
+                  />
+                  <p className="text-[9px] text-zinc-500">
+                    Get a free API key at <a href="https://pixabay.com/api/docs/" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">pixabay.com/api</a>.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

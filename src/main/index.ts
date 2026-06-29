@@ -268,7 +268,7 @@ ipcMain.handle('db:addApiKey', async (_event, keyData: any) => {
   const encryptedKey = encrypt(apiKey);
 
   if (isDefault) {
-    await dbRun(`UPDATE api_keys SET is_default = 0 WHERE provider = ?`, [provider]);
+    await dbRun(`UPDATE api_keys SET is_default = 0`);
   }
 
   await dbRun(
@@ -276,6 +276,18 @@ ipcMain.handle('db:addApiKey', async (_event, keyData: any) => {
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [provider, name, encryptedKey, baseUrl || null, organization || null, JSON.stringify(models || []), isDefault ? 1 : 0]
   );
+  return { success: true };
+});
+
+ipcMain.handle('db:setDefaultApiKey', async (_event, id: number) => {
+  await dbRun(`UPDATE api_keys SET is_default = 0`);
+  await dbRun(`UPDATE api_keys SET is_default = 1 WHERE id = ?`, [id]);
+  return { success: true };
+});
+
+ipcMain.handle('db:setApiKeyDefault', async (_event, id: number) => {
+  await dbRun(`UPDATE api_keys SET is_default = 0`);
+  await dbRun(`UPDATE api_keys SET is_default = 1 WHERE id = ?`, [id]);
   return { success: true };
 });
 
@@ -304,7 +316,7 @@ ipcMain.handle('db:createTask', async (_event, taskData: any) => {
     name, websiteId, language, country, category, keywords,
     promptTemplate, providerId, model, imageGeneration,
     imageStyle, imageSize, articleLength, publishingMode,
-    seoSettings, scheduleSettings, isScheduled
+    seoSettings, scheduleSettings, isScheduled, imageModel
   } = taskData;
 
   const status = isScheduled ? 'scheduled' : 'draft';
@@ -314,14 +326,14 @@ ipcMain.handle('db:createTask', async (_event, taskData: any) => {
       name, website_id, language, country, category, keywords,
       prompt_template, provider_id, model, image_generation,
       image_style, image_size, article_length, publishing_mode,
-      seo_settings, schedule_settings, status
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      seo_settings, schedule_settings, status, image_model
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       name, websiteId, language || 'en', country || 'us', category || 'General',
-      JSON.stringify(keywords), promptTemplate, providerId, model, imageGeneration ? 1 : 0,
-      imageStyle || 'photorealistic', imageSize || '1200x630', articleLength || 'medium',
+      JSON.stringify(keywords), promptTemplate, providerId, model, imageGeneration !== undefined ? imageGeneration : 0,
+      imageStyle || 'photorealistic', imageSize || '1200x628', articleLength || 'medium',
       publishingMode || 'draft', JSON.stringify(seoSettings || {}),
-      JSON.stringify(scheduleSettings || {}), status
+      JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2'
     ]
   );
 
@@ -355,13 +367,13 @@ ipcMain.handle('db:duplicateTask', async (_event, id: number) => {
       name, website_id, language, country, category, keywords,
       prompt_template, provider_id, model, image_generation,
       image_style, image_size, article_length, publishing_mode,
-      seo_settings, schedule_settings, status
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
+      seo_settings, schedule_settings, status, image_model
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)`,
     [
       newName, original.website_id, original.language, original.country, original.category,
       original.keywords, original.prompt_template, original.provider_id, original.model,
       original.image_generation, original.image_style, original.image_size, original.article_length,
-      original.publishing_mode, original.seo_settings, original.schedule_settings
+      original.publishing_mode, original.seo_settings, original.schedule_settings, original.image_model || 'gpt-image-2'
     ]
   );
 
@@ -427,7 +439,7 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
     name, websiteId, language, country, category, keywords,
     promptTemplate, providerId, model, imageGeneration,
     imageStyle, imageSize, articleLength, publishingMode,
-    seoSettings, scheduleSettings, isScheduled, status
+    seoSettings, scheduleSettings, isScheduled, status, imageModel
   } = taskData;
 
   await dbRun(
@@ -436,14 +448,14 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
       keywords = ?, prompt_template = ?, provider_id = ?, model = ?, 
       image_generation = ?, image_style = ?, image_size = ?, article_length = ?, 
       publishing_mode = ?, seo_settings = ?, schedule_settings = ?, status = ?,
-      updated_at = CURRENT_TIMESTAMP
+      image_model = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
     [
       name, websiteId, language, country, category, 
       JSON.stringify(keywords), promptTemplate, providerId, model, 
-      imageGeneration ? 1 : 0, imageStyle, imageSize, articleLength, 
+      imageGeneration !== undefined ? imageGeneration : 0, imageStyle, imageSize, articleLength, 
       publishingMode, JSON.stringify(seoSettings || {}), 
-      JSON.stringify(scheduleSettings || {}), status, id
+      JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2', id
     ]
   );
 
