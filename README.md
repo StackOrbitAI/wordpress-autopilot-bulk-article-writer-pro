@@ -9,6 +9,10 @@ It integrates with multiple LLM providers (OpenAI, Google Gemini, Anthropic Clau
 ## 🚀 Key Features
 
 * **Sleek Dark UI**: Beautiful glassmorphic dark-theme workspace powered by React 19, Tailwind CSS, shadcn/ui styles, and Framer Motion.
+* **AI Agents Hub & Page Templates**: Run real-time AI optimization agents to rewrite paragraphs, optimize headings, align keywords, generate standard static pages (About Us, Contact Us, Privacy Policy), and optimize category descriptions on connected WordPress sites.
+* **SEO Link Controls**: Fine-grain controls for internal (placeholder wiki-style) and outbound (authoritative reference) hyperlink insertions with custom target density.
+* **Google Docs Metadata Integration**: Automatically format and prepend structured SEO metadata (Yoast/RankMath compatible focus keyword, title, description, slug) directly inside uploaded Google Docs documents.
+* **Image Credits & Disclaimer Injection**: Automatic insertion of image credits (AI generated or Pexels/Unsplash/Pixabay stock presets) and custom disclaimers to ensure AdSense compatibility.
 * **License & Device Activation**: Multi-device license checking supporting online authorization and local offline activation modes.
 * **AI Provider Suite**: Multi-key management for OpenAI, Gemini, Claude, OpenRouter, and custom OpenAI-compatible REST APIs.
 * **Bulk Keyword Pipeline**: Direct TXT, CSV, or Excel file importer to parse and queue thousands of articles in seconds.
