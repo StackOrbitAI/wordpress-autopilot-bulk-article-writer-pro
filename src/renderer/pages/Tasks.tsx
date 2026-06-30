@@ -103,7 +103,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
   const [inlineImagesCount, setInlineImagesCount] = useState<number>(3);
   const [inlineImagesParagraphInterval, setInlineImagesParagraphInterval] = useState<number>(3);
   const [customImageSize, setCustomImageSize] = useState<string>('');
-  const [runwareModelsList, setRunwareModelsList] = useState<string[]>(['runware:100', 'civitai:102438@133677']);
+  const [runwareModelsList, setRunwareModelsList] = useState<string[]>(['cblas-flux-1-schnell', 'runware:100', 'civitai:102438@133677']);
   const [articleLength, setArticleLength] = useState('medium');
   const [publishingMode, setPublishingMode] = useState<'draft' | 'pending' | 'publish' | 'future'>('publish');
   const [publishTargetWp, setPublishTargetWp] = useState(true);
@@ -1294,7 +1294,15 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
             <div className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-4 space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Featured Image Source</label>
-                <Select value={imageGeneration.toString()} onChange={(e) => setImageGeneration(parseInt(e.target.value, 10))}>
+                <Select value={imageGeneration.toString()} onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setImageGeneration(val);
+                  if (val === 100 && (imageModel === 'gpt-image-2' || !imageModel)) {
+                    setImageModel('cblas-flux-1-schnell');
+                  } else if (val === 1 && (imageModel === 'cblas-flux-1-schnell' || !imageModel)) {
+                    setImageModel('gpt-image-2');
+                  }
+                }}>
                   <option value="0">None (No Featured Image)</option>
                   <option value="1">AI Generated (OpenAI DALL-E)</option>
                   <option value="100">AI Generated (Runware.ai)</option>

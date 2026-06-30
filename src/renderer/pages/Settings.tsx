@@ -28,7 +28,7 @@ const Settings: React.FC = () => {
   const [unsplashApiKey, setUnsplashApiKey] = useState('');
   const [pixabayApiKey, setPixabayApiKey] = useState('');
   const [runwareApiKey, setRunwareApiKey] = useState('');
-  const [runwareCustomModels, setRunwareCustomModels] = useState('runware:100, civitai:102438@133677');
+  const [runwareCustomModels, setRunwareCustomModels] = useState('cblas-flux-1-schnell, runware:100, civitai:102438@133677');
   
   // Google Docs Integration States
   const [googleAuthType, setGoogleAuthType] = useState('oauth');
@@ -407,7 +407,7 @@ const Settings: React.FC = () => {
                     type="text" 
                     value={runwareCustomModels} 
                     onChange={(e) => setRunwareCustomModels(e.target.value)} 
-                    placeholder="runware:100, civitai:102438@133677" 
+                    placeholder="cblas-flux-1-schnell, runware:100, civitai:102438@133677" 
                     className="bg-zinc-950 border-zinc-800 text-xs"
                   />
                   <p className="text-[9px] text-zinc-500">
