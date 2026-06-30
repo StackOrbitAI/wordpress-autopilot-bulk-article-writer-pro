@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sun, Moon, Bell, RefreshCw, Radio } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
@@ -18,6 +18,8 @@ const Topbar: React.FC<TopbarProps> = ({ activeTab, theme, setTheme }) => {
     'Welcome to StackOrbitAI Bulk Writer Pro!',
     'Database initialized successfully.'
   ]);
+
+  const isManualCheckRef = useRef(false);
 
   const tabTitles: Record<string, string> = {
     dashboard: 'Dashboard Overview',
@@ -49,8 +51,17 @@ const Topbar: React.FC<TopbarProps> = ({ activeTab, theme, setTheme }) => {
         setUpdaterType('available');
         setUpdaterMessage(`Update v${info.version} available!`);
         addNotification(`New update v${info.version} available. Click download in Topbar.`);
+        if (isManualCheckRef.current) {
+          alert(`New update v${info.version} is available! Downloading will start shortly.`);
+          isManualCheckRef.current = false;
+        }
       }),
       api.onUpdaterEvent('updater-update-not-available', () => {
+        if (isManualCheckRef.current) {
+          addNotification('You are already using the latest version.');
+          alert('You are already using the latest version of StackOrbitAI Bulk Writer Pro.');
+          isManualCheckRef.current = false;
+        }
         setUpdaterType('idle');
         setUpdaterMessage('');
       }),
@@ -67,6 +78,10 @@ const Topbar: React.FC<TopbarProps> = ({ activeTab, theme, setTheme }) => {
       api.onUpdaterEvent('updater-error', (err: any) => {
         setUpdaterType('error');
         setUpdaterMessage(`Update Error: ${err.message}`);
+        if (isManualCheckRef.current) {
+          alert(`Update check failed: ${err.message}`);
+          isManualCheckRef.current = false;
+        }
       })
     ];
 
@@ -82,12 +97,15 @@ const Topbar: React.FC<TopbarProps> = ({ activeTab, theme, setTheme }) => {
   const handleCheckUpdates = async () => {
     const api = (window as any).api;
     if (!api) return;
+    isManualCheckRef.current = true;
     setUpdaterType('checking');
     setUpdaterMessage('Checking...');
     const res = await api.checkUpdates();
     if (!res.success) {
       setUpdaterType('error');
       setUpdaterMessage('Update check failed');
+      alert(`Update check failed: ${res.error || 'Unknown error'}`);
+      isManualCheckRef.current = false;
     }
   };
 
