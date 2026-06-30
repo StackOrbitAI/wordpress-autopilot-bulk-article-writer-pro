@@ -55,42 +55,12 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordsText, setKeywordsText] = useState('');
   const [promptTemplate, setPromptTemplate] = useState(
-    `Write an in-depth, captivating, and well-researched blog post of 2,000–3,000 words on {keyword}. The content should be written in a natural, human tone, engaging the reader through storytelling, personal anecdotes, and clear examples.
-
-Ensure the post is rich in value, covering every aspect of the topic from different perspectives, offering expert insights, analysis, and actionable advice. While writing, naturally incorporate strong E-E-A-T principles by demonstrating real-life experience, expert-backed insights, credible research support, and trustworthy guidance that aligns with Google's quality standards. The writing should flow seamlessly, with easy-to-follow subheadings, bullet points, and unique markdown formatting to enhance readability, without Separator in paragraph.
-
-Incorporate outbound links to authoritative websites and resources within each paragraph and heading to support key points and improve SEO. Avoid jargon and keep the language conversational and relatable, making the content both informative and entertaining. Ensure the content reflects high levels of experience, expertise, authoritativeness, and trustworthiness in every section to build credibility and create a strong E-E-A-T foundation.
-
-For outbound links, include 8 to 10 high-quality references from authoritative sources within the content. Do not list these links separately; instead, naturally integrate them within different paragraphs by hyperlinking relevant keywords or phrases. Avoid using direct URLs. The links should add value and credibility without overwhelming the content.
-
-Include a comparison table (with an attractive heading) to illustrate key points, as well as a detailed FAQ section to address common questions. End with a long, well-rounded conclusion that ties the content together and offers next steps or reflections for the reader.
-Make sure the article is plagiarism-free and SEO-optimized.
-I also want my blogs to be written specifically for getting AdSense approval, so there should not be any issues like policy violations or low-value content. Please make sure the blogs are high-value and completely free from any kind of policy violation, and ensure the writing follows strong E-E-A-T standards to maximize trustworthiness and AdSense compatibility.
-
-Important Instruction:
-
-The final blog content must ONLY discuss the topic itself.
-Do NOT mention, reference, explain, or hint at this prompt, instructions, writing guidelines, SEO rules, E-E-A-T terms, AdSense approval, or any meta/process-related information anywhere in the blog content.
-
-➕ ADDITIONAL BUYER REQUIREMENTS
-
-Add the following conditions while writing the blog:
-
-The content must not feel AI-generated and should read like it is written by a knowledgeable human subject-matter expert
-
-Do NOT use first-person storytelling or personal anecdotes such as “I’ll never forget…”, “I once saw…”, “my neighbor”, or similar narrative-style experiences
-
-Do NOT include fictional characters, names, or repeated story examples (for example, recurring names like “Sarah” or invented scenarios)
-
-All examples must be neutral, factual, topic-focused, and informational, written in an objective third-person tone
-Avoid emotional storytelling meant to simulate human experience; instead, rely on real-world context, practical explanations, observed patterns, and credible references
-
-Keep examples varied, realistic, and directly relevant to the topic, without templated storytelling formats`
+    `Create a compelling, SEO-optimized H1 title (50–65 characters) that naturally includes the primary keyword near the beginning, accurately reflects the article's content, is unique, and encourages clicks without using clickbait or misleading claims.`
   );
   const [providerId, setProviderId] = useState('');
   const [model, setModel] = useState('');
   const [isCustomModel, setIsCustomModel] = useState<boolean>(false);
-  const [imageGeneration, setImageGeneration] = useState<number>(1);
+  const [imageGeneration, setImageGeneration] = useState<number>(3);
   const [imageStyle, setImageStyle] = useState('photorealistic');
   const [imageSize, setImageSize] = useState('1200x628');
   const [imageModel, setImageModel] = useState('gpt-image-2');
@@ -103,10 +73,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
   const [publishingMode, setPublishingMode] = useState<'draft' | 'pending' | 'publish' | 'future'>('publish');
   const [publishTargetWp, setPublishTargetWp] = useState(true);
   const [publishTargetGoogle, setPublishTargetGoogle] = useState(false);
-  const [seoPlugin, setSeoPlugin] = useState<'yoast' | 'rankmath' | 'aioseo' | 'none'>('yoast');
-  const [insertInternalLinks, setInsertInternalLinks] = useState<boolean>(true);
+  const [seoPlugin, setSeoPlugin] = useState<'yoast' | 'rankmath' | 'aioseo' | 'none'>('none');
+  const [insertInternalLinks, setInsertInternalLinks] = useState<boolean>(false);
   const [internalLinksCount, setInternalLinksCount] = useState<number>(3);
-  const [insertOutboundLinks, setInsertOutboundLinks] = useState<boolean>(true);
+  const [insertOutboundLinks, setInsertOutboundLinks] = useState<boolean>(false);
   const [outboundLinksCount, setOutboundLinksCount] = useState<number>(5);
   const [isScheduled, setIsScheduled] = useState(false);
   
@@ -196,16 +166,22 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
           
           setPromptTemplate(d.promptTemplate || '');
           
-          const dbDefaultProv = provs.find((p: any) => p.is_default === 1);
+          const geminiProv = provs.find((p: any) => p.provider === 'gemini');
+          const dbDefaultProv = geminiProv || provs.find((p: any) => p.is_default === 1);
           if (dbDefaultProv) {
             setProviderId(dbDefaultProv.id.toString());
             const models = JSON.parse(dbDefaultProv.models || '[]');
             if (models.length > 0) {
-              const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
-              if (gpt4oIndex !== -1) {
-                setModel(models[gpt4oIndex]);
+              const geminiIndex = models.findIndex((m: string) => m.toLowerCase().includes('gemini'));
+              if (geminiIndex !== -1) {
+                setModel(models[geminiIndex]);
               } else {
-                setModel(models[0]);
+                const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
+                if (gpt4oIndex !== -1) {
+                  setModel(models[gpt4oIndex]);
+                } else {
+                  setModel(models[0]);
+                }
               }
               setIsCustomModel(false);
             }
@@ -221,15 +197,22 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
               setModel(models[0]);
             }
           } else if (provs.length > 0) {
-            setProviderId(provs[0].id.toString());
-            const models = JSON.parse(provs[0].models || '[]');
+            const geminiProvFallback = provs.find((p: any) => p.provider === 'gemini');
+            const fallbackProv = geminiProvFallback || provs[0];
+            setProviderId(fallbackProv.id.toString());
+            const models = JSON.parse(fallbackProv.models || '[]');
             if (models.length > 0) {
+              const geminiIndex = models.findIndex((m: string) => m.toLowerCase().includes('gemini'));
+              if (geminiIndex !== -1) {
+                setModel(models[geminiIndex]);
+              } else {
+                setModel(models[0]);
+              }
               setIsCustomModel(false);
-              setModel(models[0]);
             }
           }
           
-          setImageGeneration(d.imageGeneration !== undefined ? d.imageGeneration : 1);
+          setImageGeneration(d.imageGeneration !== undefined ? d.imageGeneration : 3);
           setImageStyle(d.imageStyle || 'photorealistic');
           setImageSize(d.imageSize || '1200x628');
           setImageModel(d.imageModel || 'gpt-image-2');
@@ -237,7 +220,11 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
           setPublishingMode(d.publishingMode || 'publish');
           setPublishTargetWp(d.publishTargetWp !== undefined ? d.publishTargetWp : true);
           setPublishTargetGoogle(d.publishTargetGoogle !== undefined ? d.publishTargetGoogle : false);
-          setSeoPlugin(d.seoPlugin || 'yoast');
+          setSeoPlugin(d.seoPlugin || 'none');
+          setInsertInternalLinks(d.insertInternalLinks !== undefined ? d.insertInternalLinks : false);
+          setInternalLinksCount(d.internalLinksCount !== undefined ? d.internalLinksCount : 3);
+          setInsertOutboundLinks(d.insertOutboundLinks !== undefined ? d.insertOutboundLinks : false);
+          setOutboundLinksCount(d.outboundLinksCount !== undefined ? d.outboundLinksCount : 5);
           setIsScheduled(d.isScheduled || false);
           setScheduleFrequency(d.scheduleFrequency || 'once');
           return;
@@ -257,16 +244,21 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       }
       
       if (provs.length > 0) {
-        const defaultProv = provs.find((p: any) => p.is_default === 1);
-        const selectedProv = defaultProv || provs[0];
+        const geminiProv = provs.find((p: any) => p.provider === 'gemini');
+        const selectedProv = geminiProv || provs.find((p: any) => p.is_default === 1) || provs[0];
         setProviderId(selectedProv.id.toString());
         const models = JSON.parse(selectedProv.models || '[]');
         if (models.length > 0) {
-          const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
-          if (gpt4oIndex !== -1) {
-            setModel(models[gpt4oIndex]);
+          const geminiIndex = models.findIndex((m: string) => m.toLowerCase().includes('gemini'));
+          if (geminiIndex !== -1) {
+            setModel(models[geminiIndex]);
           } else {
-            setModel(models[0]);
+            const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
+            if (gpt4oIndex !== -1) {
+              setModel(models[gpt4oIndex]);
+            } else {
+              setModel(models[0]);
+            }
           }
           setIsCustomModel(false);
         }
@@ -302,14 +294,14 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         setPromptTemplate(draft.promptTemplate || '');
         setProviderId(draft.providerId || '');
         setModel(draft.model || '');
-        setImageGeneration(draft.imageGeneration !== undefined ? draft.imageGeneration : true);
+        setImageGeneration(draft.imageGeneration !== undefined ? draft.imageGeneration : 3);
         setImageStyle(draft.imageStyle || 'photorealistic');
         setImageSize(draft.imageSize || '1200x628');
         setArticleLength(draft.articleLength || 'medium');
         setPublishingMode(draft.publishingMode || 'draft');
         setPublishTargetWp(draft.publishTargetWp !== undefined ? draft.publishTargetWp : true);
         setPublishTargetGoogle(draft.publishTargetGoogle !== undefined ? draft.publishTargetGoogle : false);
-        setSeoPlugin(draft.seoPlugin || 'yoast');
+        setSeoPlugin(draft.seoPlugin || 'none');
         setIsScheduled(draft.isScheduled || false);
         setScheduleDate(draft.scheduleDate || '');
         setScheduleTime(draft.scheduleTime || '');
@@ -376,11 +368,16 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
       const models = JSON.parse(selected.models || '[]');
       if (models.length > 0) {
         if (!models.includes(model)) {
-          const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
-          if (gpt4oIndex !== -1) {
-            setModel(models[gpt4oIndex]);
+          const geminiIndex = models.findIndex((m: string) => m.toLowerCase().includes('gemini'));
+          if (geminiIndex !== -1) {
+            setModel(models[geminiIndex]);
           } else {
-            setModel(models[0]);
+            const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
+            if (gpt4oIndex !== -1) {
+              setModel(models[gpt4oIndex]);
+            } else {
+              setModel(models[0]);
+            }
           }
         }
       } else {
@@ -665,16 +662,22 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         setSelectedCategories(d.selectedCategories || []);
         setPromptTemplate(d.promptTemplate || '');
         
-        const dbDefaultProv = providers.find((p: any) => p.is_default === 1);
+        const geminiProv = providers.find((p: any) => p.provider === 'gemini');
+        const dbDefaultProv = geminiProv || providers.find((p: any) => p.is_default === 1);
         if (dbDefaultProv) {
           setProviderId(dbDefaultProv.id.toString());
           const models = JSON.parse(dbDefaultProv.models || '[]');
           if (models.length > 0) {
-            const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
-            if (gpt4oIndex !== -1) {
-              setModel(models[gpt4oIndex]);
+            const geminiIndex = models.findIndex((m: string) => m.toLowerCase().includes('gemini'));
+            if (geminiIndex !== -1) {
+              setModel(models[geminiIndex]);
             } else {
-              setModel(models[0]);
+              const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
+              if (gpt4oIndex !== -1) {
+                setModel(models[gpt4oIndex]);
+              } else {
+                setModel(models[0]);
+              }
             }
             setIsCustomModel(false);
           }
@@ -690,15 +693,22 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
             setModel(models[0]);
           }
         } else if (providers.length > 0) {
-          setProviderId(providers[0].id.toString());
-          const models = JSON.parse(providers[0].models || '[]');
+          const geminiProvFallback = providers.find((p: any) => p.provider === 'gemini');
+          const fallbackProv = geminiProvFallback || providers[0];
+          setProviderId(fallbackProv.id.toString());
+          const models = JSON.parse(fallbackProv.models || '[]');
           if (models.length > 0) {
+            const geminiIndex = models.findIndex((m: string) => m.toLowerCase().includes('gemini'));
+            if (geminiIndex !== -1) {
+              setModel(models[geminiIndex]);
+            } else {
+              setModel(models[0]);
+            }
             setIsCustomModel(false);
-            setModel(models[0]);
           }
         }
         
-        setImageGeneration(d.imageGeneration !== undefined ? d.imageGeneration : 1);
+        setImageGeneration(d.imageGeneration !== undefined ? d.imageGeneration : 3);
         setIsCustomModel(d.isCustomModel !== undefined ? d.isCustomModel : false);
         setImageStyle(d.imageStyle || 'photorealistic');
         setImageSize(d.imageSize || '1200x628');
@@ -711,10 +721,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         setPublishingMode(d.publishingMode || 'publish');
         setPublishTargetWp(d.publishTargetWp !== undefined ? d.publishTargetWp : true);
         setPublishTargetGoogle(d.publishTargetGoogle !== undefined ? d.publishTargetGoogle : false);
-        setSeoPlugin(d.seoPlugin || 'yoast');
-        setInsertInternalLinks(d.insertInternalLinks !== undefined ? d.insertInternalLinks : true);
+        setSeoPlugin(d.seoPlugin || 'none');
+        setInsertInternalLinks(d.insertInternalLinks !== undefined ? d.insertInternalLinks : false);
         setInternalLinksCount(d.internalLinksCount !== undefined ? d.internalLinksCount : 3);
-        setInsertOutboundLinks(d.insertOutboundLinks !== undefined ? d.insertOutboundLinks : true);
+        setInsertOutboundLinks(d.insertOutboundLinks !== undefined ? d.insertOutboundLinks : false);
         setOutboundLinksCount(d.outboundLinksCount !== undefined ? d.outboundLinksCount : 5);
         setIsScheduled(d.isScheduled || false);
         setScheduleFrequency(d.scheduleFrequency || 'once');
@@ -728,54 +738,29 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
     setPublishTargetWp(true);
     setPublishTargetGoogle(false);
     setSelectedCategories([]);
-    setPromptTemplate(`Write an in-depth, captivating, and well-researched blog post of 2,000–3,000 words on {keyword}. The content should be written in a natural, human tone, engaging the reader through storytelling, personal anecdotes, and clear examples.
-
-Ensure the post is rich in value, covering every aspect of the topic from different perspectives, offering expert insights, analysis, and actionable advice. While writing, naturally incorporate strong E-E-A-T principles by demonstrating real-life experience, expert-backed insights, credible research support, and trustworthy guidance that aligns with Google's quality standards. The writing should flow seamlessly, with easy-to-follow subheadings, bullet points, and unique markdown formatting to enhance readability, without Separator in paragraph.
-
-Incorporate outbound links to authoritative websites and resources within each paragraph and heading to support key points and improve SEO. Avoid jargon and keep the language conversational and relatable, making the content both informative and entertaining. Ensure the content reflects high levels of experience, expertise, authoritativeness, and trustworthiness in every section to build credibility and create a strong E-E-A-T foundation.
-
-For outbound links, include 8 to 10 high-quality references from authoritative sources within the content. Do not list these links separately; instead, naturally integrate them within different paragraphs by hyperlinking relevant keywords or phrases. Avoid using direct URLs. The links should add value and credibility without overwhelming the content.
-
-Include a comparison table (with an attractive heading) to illustrate key points, as well as a detailed FAQ section to address common questions. End with a long, well-rounded conclusion that ties the content together and offers next steps or reflections for the reader.
-Make sure the article is plagiarism-free and SEO-optimized.
-I also want my blogs to be written specifically for getting AdSense approval, so there should not be any issues like policy violations or low-value content. Please make sure the blogs are high-value and completely free from any kind of policy violation, and ensure the writing follows strong E-E-A-T standards to maximize trustworthiness and AdSense compatibility.
-
-Important Instruction:
-
-The final blog content must ONLY discuss the topic itself.
-Do NOT mention, reference, explain, or hint at this prompt, instructions, writing guidelines, SEO rules, E-E-A-T terms, AdSense approval, or any meta/process-related information anywhere in the blog content.
-
-➕ ADDITIONAL BUYER REQUIREMENTS
-
-Add the following conditions while writing the blog:
-
-The content must not feel AI-generated and should read like it is written by a knowledgeable human subject-matter expert
-
-Do NOT use first-person storytelling or personal anecdotes such as “I’ll never forget…”, “I once saw…”, “my neighbor”, or similar narrative-style experiences
-
-Do NOT include fictional characters, names, or repeated story examples (for example, recurring names like “Sarah” or invented scenarios)
-
-All examples must be neutral, factual, topic-focused, and informational, written in an objective third-person tone
-Avoid emotional storytelling meant to simulate human experience; instead, rely on real-world context, practical explanations, observed patterns, and credible references
-
-Keep examples varied, realistic, and directly relevant to the topic, without templated storytelling formats`);
+    setPromptTemplate(`Create a compelling, SEO-optimized H1 title (50–65 characters) that naturally includes the primary keyword near the beginning, accurately reflects the article's content, is unique, and encourages clicks without using clickbait or misleading claims.`);
     
     if (providers.length > 0) {
-      const defaultProv = providers.find((p: any) => p.is_default === 1);
-      setProviderId(defaultProv ? defaultProv.id.toString() : providers[0].id.toString());
-      const selectedProv = defaultProv || providers[0];
-      const models = JSON.parse(selectedProv.models || '[]');
+      const geminiProv = providers.find((p: any) => p.provider === 'gemini');
+      const defaultProv = geminiProv || providers.find((p: any) => p.is_default === 1) || providers[0];
+      setProviderId(defaultProv.id.toString());
+      const models = JSON.parse(defaultProv.models || '[]');
       if (models.length > 0) {
-        const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
-        if (gpt4oIndex !== -1) {
-          setModel(models[gpt4oIndex]);
+        const geminiIndex = models.findIndex((m: string) => m.toLowerCase().includes('gemini'));
+        if (geminiIndex !== -1) {
+          setModel(models[geminiIndex]);
         } else {
-          setModel(models[0]);
+          const gpt4oIndex = models.findIndex((m: string) => m.toLowerCase() === 'gpt-4o');
+          if (gpt4oIndex !== -1) {
+            setModel(models[gpt4oIndex]);
+          } else {
+            setModel(models[0]);
+          }
         }
         setIsCustomModel(false);
       }
     }
-    setImageGeneration(1);
+    setImageGeneration(3);
     setIsCustomModel(false);
     setImageStyle('photorealistic');
     setImageSize('1200x628');
@@ -786,10 +771,10 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
     setCustomImageSize('');
     setArticleLength('medium');
     setPublishingMode('publish');
-    setSeoPlugin('yoast');
-    setInsertInternalLinks(true);
+    setSeoPlugin('none');
+    setInsertInternalLinks(false);
     setInternalLinksCount(3);
-    setInsertOutboundLinks(true);
+    setInsertOutboundLinks(false);
     setOutboundLinksCount(5);
     setIsScheduled(false);
     setScheduleFrequency('once');

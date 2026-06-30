@@ -538,37 +538,7 @@ class QueueManager {
       }
 
       const promptTemplate = job.prompt_template || 
-        `Write an in-depth, captivating, and well-researched blog post of 2,000–3,000 words on {keyword}. The content should be written in a natural, human tone, engaging the reader through storytelling, personal anecdotes, and clear examples.
-
-Ensure the post is rich in value, covering every aspect of the topic from different perspectives, offering expert insights, analysis, and actionable advice. While writing, naturally incorporate strong E-E-A-T principles by demonstrating real-life experience, expert-backed insights, credible research support, and trustworthy guidance that aligns with Google's quality standards. The writing should flow seamlessly, with easy-to-follow subheadings, bullet points, and unique markdown formatting to enhance readability, without Separator in paragraph.
-
-Incorporate outbound links to authoritative websites and resources within each paragraph and heading to support key points and improve SEO. Avoid jargon and keep the language conversational and relatable, making the content both informative and entertaining. Ensure the content reflects high levels of experience, expertise, authoritativeness, and trustworthiness in every section to build credibility and create a strong E-E-A-T foundation.
-
-For outbound links, include 8 to 10 high-quality references from authoritative sources within the content. Do not list these links separately; instead, naturally integrate them within different paragraphs by hyperlinking relevant keywords or phrases. Avoid using direct URLs. The links should add value and credibility without overwhelming the content.
-
-Include a comparison table (with an attractive heading) to illustrate key points, as well as a detailed FAQ section to address common questions. End with a long, well-rounded conclusion that ties the content together and offers next steps or reflections for the reader.
-Make sure the article is plagiarism-free and SEO-optimized.
-I also want my blogs to be written specifically for getting AdSense approval, so there should not be any issues like policy violations or low-value content. Please make sure the blogs are high-value and completely free from any kind of policy violation, and ensure the writing follows strong E-E-A-T standards to maximize trustworthiness and AdSense compatibility.
-
-Important Instruction:
-
-The final blog content must ONLY discuss the topic itself.
-Do NOT mention, reference, explain, or hint at this prompt, instructions, writing guidelines, SEO rules, E-E-A-T terms, AdSense approval, or any meta/process-related information anywhere in the blog content.
-
-➕ ADDITIONAL BUYER REQUIREMENTS
-
-Add the following conditions while writing the blog:
-
-The content must not feel AI-generated and should read like it is written by a knowledgeable human subject-matter expert
-
-Do NOT use first-person storytelling or personal anecdotes such as “I’ll never forget…”, “I once saw…”, “my neighbor”, or similar narrative-style experiences
-
-Do NOT include fictional characters, names, or repeated story examples (for example, recurring names like “Sarah” or invented scenarios)
-
-All examples must be neutral, factual, topic-focused, and informational, written in an objective third-person tone
-Avoid emotional storytelling meant to simulate human experience; instead, rely on real-world context, practical explanations, observed patterns, and credible references
-
-Keep examples varied, realistic, and directly relevant to the topic, without templated storytelling formats`;
+        `Create a compelling, SEO-optimized H1 title (50–65 characters) that naturally includes the primary keyword near the beginning, accurately reflects the article's content, is unique, and encourages clicks without using clickbait or misleading claims.`;
       
       const customPrompt = promptTemplate
         .replace(/{keyword}/g, keyword)
@@ -601,6 +571,9 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
         // ignore
       }
 
+      // Format constraint for AI to output TITLE: and DESCRIPTION:
+      promptWithLinks += `\n\nResponse Format:\nYour response MUST begin with the H1 title and meta description in the following format:\nTITLE: <article title>\nDESCRIPTION: <meta description (150-160 characters)>\n\nFollowed by a blank line and then the rest of the generated content (if any).`;
+
       // 4. Generate content
       await this.log(taskId, jobId, 'info', `Generating article content...`);
       const genResult = await generateArticle(aiConfig, job.model, promptWithLinks);
@@ -612,17 +585,41 @@ Keep examples varied, realistic, and directly relevant to the topic, without tem
 
       // Extract SEO elements from generated content if possible, or build basic fallback
       let parsedTitle = keyword.charAt(0).toUpperCase() + keyword.slice(1);
-      let cleanContent = genResult.text;
+      let cleanContent = genResult.text.trim();
       let seoTitle = parsedTitle;
       let seoDescription = `Learn all about ${keyword} in our detailed guide.`;
 
-      // Simple extraction of Title from H1 or markdown title
-      const titleMatch = genResult.text.match(/^#\s+(.+)$/m) || genResult.text.match(/^Title:\s*(.+)$/im);
-      if (titleMatch) {
-        parsedTitle = titleMatch[1].trim();
+      // Try parsing from TITLE: and DESCRIPTION: format first
+      const titlePrefixMatch = cleanContent.match(/^TITLE:\s*(.+)$/im);
+      const descPrefixMatch = cleanContent.match(/^DESCRIPTION:\s*(.+)$/im);
+
+      if (titlePrefixMatch) {
+        parsedTitle = titlePrefixMatch[1].trim();
         seoTitle = parsedTitle;
-        // Strip out the first H1 if it's there
-        cleanContent = genResult.text.replace(/^#\s+.+$/m, '').trim();
+        cleanContent = cleanContent.replace(/^TITLE:\s*.+$/im, '').trim();
+      }
+      if (descPrefixMatch) {
+        seoDescription = descPrefixMatch[1].trim();
+        cleanContent = cleanContent.replace(/^DESCRIPTION:\s*.+$/im, '').trim();
+      }
+
+      // Fallback: If no TITLE: prefix was found, search for markdown H1 or "Title:" line
+      if (!titlePrefixMatch) {
+        const titleMatch = cleanContent.match(/^#\s+(.+)$/m) || cleanContent.match(/^Title:\s*(.+)$/im);
+        if (titleMatch) {
+          parsedTitle = titleMatch[1].trim();
+          seoTitle = parsedTitle;
+          cleanContent = cleanContent.replace(/^#\s+.+$/m, '').trim();
+          cleanContent = cleanContent.replace(/^Title:\s*.+$/im, '').trim();
+        } else {
+          // Last fallback: if the whole generated text is very short, it could be the title itself
+          const lines = cleanContent.split('\n').map(l => l.trim()).filter(Boolean);
+          if (lines.length === 1 || cleanContent.length < 150) {
+            parsedTitle = cleanContent.replace(/^#+\s*/, '').trim();
+            seoTitle = parsedTitle;
+            cleanContent = `<h1>${parsedTitle}</h1><p>Generated article for keyword: ${keyword}.</p>`;
+          }
+        }
       }
 
       // Generate SEO-ready slug from the final parsed title (fallback to keyword)

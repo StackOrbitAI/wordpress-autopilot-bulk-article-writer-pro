@@ -43,6 +43,8 @@ const Agents: React.FC = () => {
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
   const [articleFilter, setArticleFilter] = useState<'all' | 'publish' | 'draft'>('all');
   const [articles, setArticles] = useState<ExistingArticle[]>([]);
+  const [pages, setPages] = useState<ExistingArticle[]>([]);
+  const [contentType, setContentType] = useState<'posts' | 'pages'>('posts');
   const [selectedArticles, setSelectedArticles] = useState<number[]>([]);
   
   // Existing Categories State
@@ -53,13 +55,13 @@ const Agents: React.FC = () => {
   const [manualContentType, setManualContentType] = useState<'post' | 'page' | 'category'>('post');
   const [manualTitle, setManualTitle] = useState('');
   const [manualFocusKeyword, setManualFocusKeyword] = useState('');
-  const [manualSeoPlugin, setManualSeoPlugin] = useState<'yoast' | 'rankmath' | 'none'>('rankmath');
+  const [manualSeoPlugin, setManualSeoPlugin] = useState<'yoast' | 'rankmath' | 'none'>('none');
 
   // Enhancement parameters
   const [improveParagraphs, setImproveParagraphs] = useState(true);
   const [improveHeadings, setImproveHeadings] = useState(false);
   const [improveImages, setImproveImages] = useState(false);
-  const [autoSeo, setAutoSeo] = useState(true);
+  const [autoSeo, setAutoSeo] = useState(false);
 
   // New Page creation parameters
   const [newPageTitle, setNewPageTitle] = useState('');
@@ -110,11 +112,20 @@ const Agents: React.FC = () => {
         const fetchedPosts = await api.getWordPressArticles(siteIdNum, { per_page: 50 });
         setArticles(fetchedPosts || []);
         
+        // Fetch pages
+        let fetchedPages: any[] = [];
+        try {
+          fetchedPages = await api.getWordPressPages(siteIdNum, { per_page: 50 });
+          setPages(fetchedPages || []);
+        } catch (pageErr: any) {
+          console.error('Failed to fetch pages:', pageErr);
+        }
+        
         // Fetch categories
         const fetchedCats = await api.getWordPressCategories(siteIdNum);
         setCategories(fetchedCats || []);
         
-        setAgentLogs(prev => [...prev, `[System] Successfully loaded ${fetchedPosts?.length || 0} articles & ${fetchedCats?.length || 0} categories.`]);
+        setAgentLogs(prev => [...prev, `[System] Successfully loaded ${fetchedPosts?.length || 0} articles, ${fetchedPages?.length || 0} pages, & ${fetchedCats?.length || 0} categories.`]);
       } catch (err: any) {
         console.error('Failed to fetch site contents:', err);
         setAgentLogs(prev => [...prev, `[Error] Failed to connect: ${err.message}`]);
@@ -127,10 +138,10 @@ const Agents: React.FC = () => {
   }, [selectedSiteId]);
 
   const handleSelectAllArticles = () => {
-    if (selectedArticles.length === filteredArticles.length) {
+    if (selectedArticles.length === filteredItems.length) {
       setSelectedArticles([]);
     } else {
-      setSelectedArticles(filteredArticles.map(a => a.id));
+      setSelectedArticles(filteredItems.map(a => a.id));
     }
   };
 
@@ -150,7 +161,9 @@ const Agents: React.FC = () => {
     }
   };
 
-  const filteredArticles = articles.filter(a => {
+  const currentItems = contentType === 'posts' ? articles : pages;
+
+  const filteredItems = currentItems.filter(a => {
     const matchesStatus = articleFilter === 'all' || a.status === articleFilter;
     return matchesStatus;
   });
@@ -158,7 +171,7 @@ const Agents: React.FC = () => {
   // Run the actual AI optimization agent!
   const handleStartOptimization = async () => {
     if (selectedArticles.length === 0) {
-      alert('Please select at least one article to optimize.');
+      alert(`Please select at least one ${contentType === 'posts' ? 'article' : 'page'} to optimize.`);
       return;
     }
 
@@ -166,28 +179,38 @@ const Agents: React.FC = () => {
     if (!api) return;
 
     setRunningAgent(true);
-    setAgentLogs([`[AI Optimization Agent] Starting run for ${selectedArticles.length} article(s)...`]);
+    setAgentLogs([`[AI Optimization Agent] Starting run for ${selectedArticles.length} ${contentType === 'posts' ? 'article(s)' : 'page(s)'}...`]);
 
     try {
       const siteIdNum = parseInt(selectedSiteId, 10);
       
       for (let i = 0; i < selectedArticles.length; i++) {
-        const articleId = selectedArticles[i];
-        const articleObj = articles.find(a => a.id === articleId);
+        const itemId = selectedArticles[i];
+        const itemObj = currentItems.find(a => a.id === itemId);
         
-        setAgentLogs(prev => [...prev, `[AI Agent] [${i + 1}/${selectedArticles.length}] Optimizing: "${articleObj?.title || articleId}"...`]);
+        setAgentLogs(prev => [...prev, `[AI Agent] [${i + 1}/${selectedArticles.length}] Optimizing ${contentType === 'posts' ? 'article' : 'page'}: "${itemObj?.title || itemId}"...`]);
         
-        const res = await api.optimizeWordPressArticle(siteIdNum, articleId, {
-          improveParagraphs,
-          improveHeadings,
-          improveImages,
-          autoSeo
-        });
+        let res;
+        if (contentType === 'posts') {
+          res = await api.optimizeWordPressArticle(siteIdNum, itemId, {
+            improveParagraphs,
+            improveHeadings,
+            improveImages,
+            autoSeo
+          });
+        } else {
+          res = await api.optimizeWordPressPage(siteIdNum, itemId, {
+            improveParagraphs,
+            improveHeadings,
+            improveImages,
+            autoSeo
+          });
+        }
 
         if (res.success) {
-          setAgentLogs(prev => [...prev, `[Success] Optimized: "${articleObj?.title || articleId}" saved to WordPress.`]);
+          setAgentLogs(prev => [...prev, `[Success] Optimized ${contentType === 'posts' ? 'article' : 'page'}: "${itemObj?.title || itemId}" saved to WordPress.`]);
         } else {
-          setAgentLogs(prev => [...prev, `[Error] Failed to optimize "${articleObj?.title || articleId}": ${res.error}`]);
+          setAgentLogs(prev => [...prev, `[Error] Failed to optimize "${itemObj?.title || itemId}": ${res.error}`]);
         }
       }
       setAgentLogs(prev => [...prev, `[AI Optimization Agent] Completed all optimization tasks!`]);
@@ -369,7 +392,7 @@ const Agents: React.FC = () => {
               <CardDescription>Configure optimization criteria applied by the AI Agent.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Select WordPress Site</label>
                   <Select value={selectedSiteId} onChange={(e) => setSelectedSiteId(e.target.value)}>
@@ -381,9 +404,20 @@ const Agents: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Content Type</label>
+                  <Select value={contentType} onChange={(e: any) => {
+                    setContentType(e.target.value);
+                    setSelectedArticles([]);
+                  }}>
+                    <option value="posts">Articles / Posts</option>
+                    <option value="pages">Static Pages</option>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Filter By Status</label>
                   <Select value={articleFilter} onChange={(e: any) => setArticleFilter(e.target.value)}>
-                    <option value="all">All Articles</option>
+                    <option value="all">All Items</option>
                     <option value="publish">Published Only</option>
                     <option value="draft">Drafts Only</option>
                   </Select>
@@ -456,43 +490,43 @@ const Agents: React.FC = () => {
               {/* Articles table list */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Select Articles ({filteredArticles.length} found)</h4>
+                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Select {contentType === 'posts' ? 'Articles' : 'Pages'} ({filteredItems.length} found)</h4>
                   <button 
                     onClick={handleSelectAllArticles}
                     className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold uppercase"
                   >
-                    {selectedArticles.length === filteredArticles.length ? 'Deselect All' : 'Select All'}
+                    {selectedArticles.length === filteredItems.length ? 'Deselect All' : 'Select All'}
                   </button>
                 </div>
 
                 <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/40 divide-y divide-zinc-800/60 max-h-56 overflow-y-auto custom-scrollbar">
-                  {filteredArticles.map(article => (
+                  {filteredItems.map(item => (
                     <div 
-                      key={article.id}
-                      onClick={() => handleToggleSelectArticle(article.id)}
+                      key={item.id}
+                      onClick={() => handleToggleSelectArticle(item.id)}
                       className="flex items-center justify-between p-3.5 hover:bg-zinc-900/50 cursor-pointer transition-colors"
                     >
                       <div className="flex items-center space-x-3">
-                        {selectedArticles.includes(article.id) ? (
-                          <CheckSquare className="h-4.5 w-4.5 text-indigo-500" />
+                        {selectedArticles.includes(item.id) ? (
+                           <CheckSquare className="h-4.5 w-4.5 text-indigo-500" />
                         ) : (
                           <Square className="h-4.5 w-4.5 text-zinc-600" />
                         )}
                         <div>
-                          <span className="text-xs font-semibold text-zinc-200 block">{article.title}</span>
-                          <span className="text-[10px] text-zinc-500">Author: {article.authorName} • {article.date}</span>
+                          <span className="text-xs font-semibold text-zinc-200 block">{item.title}</span>
+                          <span className="text-[10px] text-zinc-500">Author: {item.authorName} • {item.date}</span>
                         </div>
                       </div>
                       <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${
-                        article.status === 'publish' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        item.status === 'publish' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                       }`}>
-                        {article.status}
+                        {item.status}
                       </span>
                     </div>
                   ))}
-                  {filteredArticles.length === 0 && !loadingContent && (
+                  {filteredItems.length === 0 && !loadingContent && (
                     <div className="p-8 text-center text-xs text-zinc-500 font-medium">
-                      No articles found on this WordPress site.
+                      No {contentType === 'posts' ? 'articles' : 'pages'} found on this WordPress site.
                     </div>
                   )}
                   {loadingContent && (

@@ -10,7 +10,9 @@ import {
   getWordPressArticles, 
   updateWordPressArticle, 
   createWordPressPage, 
-  updateWordPressCategory 
+  updateWordPressCategory,
+  getWordPressPages,
+  updateWordPressPage
 } from './services/wordpress';
 import { generateArticle } from './services/ai';
 import { queueManager } from './services/queue';
@@ -763,6 +765,87 @@ Return ONLY the optimized HTML body content. Do NOT include markdown code block 
     return { success: true };
   } catch (err: any) {
     console.error('[AI Agent] Optimization handler failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('wp:getPages', async (_event, siteId: number, params: any) => {
+  try {
+    const site = await dbGet(`SELECT url, username, password FROM websites WHERE id = ?`, [siteId]);
+    if (!site) throw new Error('WordPress site configuration not found');
+    const decryptedPassword = decrypt(site.password);
+    return await getWordPressPages({
+      url: site.url,
+      username: site.username,
+      password: decryptedPassword
+    }, params);
+  } catch (err: any) {
+    console.error('[WordPress] Failed to fetch pages:', err.message);
+    throw err;
+  }
+});
+
+ipcMain.handle('wp:optimizePage', async (_event, siteId: number, pageId: number, strategy: any) => {
+  try {
+    const site = await dbGet(`SELECT url, username, password FROM websites WHERE id = ?`, [siteId]);
+    if (!site) throw new Error('WordPress site configuration not found');
+    const decryptedPassword = decrypt(site.password);
+    const wpConfig = {
+      url: site.url,
+      username: site.username,
+      password: decryptedPassword
+    };
+
+    const activeApiKey = (await dbGet(`SELECT provider, key_value, base_url, models FROM api_keys WHERE is_default = 1`))
+      || (await dbGet(`SELECT provider, key_value, base_url, models FROM api_keys ORDER BY id ASC LIMIT 1`));
+    if (!activeApiKey) throw new Error('No AI provider API keys configured. Please add one first.');
+
+    const decryptedKey = decrypt(activeApiKey.key_value);
+    const aiConfig = {
+      provider: activeApiKey.provider,
+      apiKey: decryptedKey,
+      baseUrl: activeApiKey.base_url || undefined
+    };
+    const models = JSON.parse(activeApiKey.models || '[]');
+    const model = models[0] || 'gpt-4o';
+
+    // Fetch the original page from WP
+    const response = await axios.get(`${site.url.replace(/\/$/, '')}/wp-json/wp/v2/pages/${pageId}`, {
+      params: { context: 'edit' },
+      headers: {
+        'Authorization': `Basic ${Buffer.from(`${site.username}:${decryptedPassword}`).toString('base64')}`
+      }
+    });
+
+    const originalTitle = response.data?.title?.raw || response.data?.title?.rendered || '';
+    const originalContent = response.data?.content?.raw || response.data?.content?.rendered || '';
+
+    // Build the AI optimization request
+    const prompt = `
+Optimize the following WordPress page:
+Title: "${originalTitle}"
+Content:
+${originalContent}
+
+Optimization Strategies to apply:
+- Paragraphs improvement: ${strategy.improveParagraphs ? 'Yes (rewrite sentences for clarity, flow, readability)' : 'No'}
+- Headings alignment: ${strategy.improveHeadings ? 'Yes (optimize subheadings to match high-relevance intents)' : 'No'}
+- SEO Enhancement: ${strategy.autoSeo ? 'Yes (align with Yoast/RankMath keyword focus)' : 'No'}
+
+Return ONLY the optimized HTML body content. Do NOT include markdown code block wrappers (like \`\`\`html) or explanations. Preserve the original page tags, lists, and tables.
+`;
+
+    const genResult = await generateArticle(aiConfig as any, model, prompt);
+    let optimizedContent = genResult.text.replace(/^```html\s*/i, '').replace(/```\s*$/i, '').trim();
+
+    // Push the update back to WordPress
+    await updateWordPressPage(wpConfig, pageId, {
+      content: optimizedContent
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[AI Agent] Page optimization handler failed:', err.message);
     return { success: false, error: err.message };
   }
 });

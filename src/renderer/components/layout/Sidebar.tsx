@@ -34,6 +34,26 @@ interface ChangelogEntry {
 
 const CHANGELOG_DATA: ChangelogEntry[] = [
   {
+    version: '1.0.60',
+    date: '2026-06-30',
+    type: 'feature',
+    changes: [
+      'Added WordPress static page optimization capabilities to the AI Agents Hub.',
+      'Updated defaults to support full prompt-controlled article title, SEO description, and content output.'
+    ]
+  },
+  {
+    version: '1.0.59',
+    date: '2026-06-30',
+    type: 'feature',
+    changes: [
+      'Updated default settings: internal/outbound link options are disabled by default.',
+      'Set default SEO plugin configuration to None.',
+      'Set Google Gemini as the default model provider and default image generator source to Unsplash.',
+      'Unchecked Auto SEO Injector checkbox by default on the AI agents page.'
+    ]
+  },
+  {
     version: '1.0.58',
     date: '2026-06-29',
     type: 'feature',

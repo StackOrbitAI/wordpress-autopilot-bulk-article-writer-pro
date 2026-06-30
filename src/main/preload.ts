@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('api', {
   getWordPressCategories: (websiteId: number) => ipcRenderer.invoke('wp:getCategories', websiteId),
   getWordPressArticles: (websiteId: number, params?: any) => ipcRenderer.invoke('wp:getArticles', websiteId, params),
   optimizeWordPressArticle: (websiteId: number, postId: number, strategy: any) => ipcRenderer.invoke('wp:optimizeArticle', websiteId, postId, strategy),
+  getWordPressPages: (websiteId: number, params?: any) => ipcRenderer.invoke('wp:getPages', websiteId, params),
+  optimizeWordPressPage: (websiteId: number, pageId: number, strategy: any) => ipcRenderer.invoke('wp:optimizePage', websiteId, pageId, strategy),
   createWordPressPageAgent: (websiteId: number, payload: any) => ipcRenderer.invoke('wp:createPage', websiteId, payload),
   optimizeWordPressCategoriesAgent: (websiteId: number, categoryIds: number[]) => ipcRenderer.invoke('wp:optimizeCategories', websiteId, categoryIds),
 

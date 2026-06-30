@@ -595,3 +595,67 @@ export async function updateWordPressCategory(
     throw new Error(error.response?.data?.message || error.message || 'Failed to update category');
   }
 }
+
+/**
+ * Fetches existing pages from WordPress site.
+ */
+export async function getWordPressPages(
+  config: WordPressSiteConfig,
+  params: { status?: string; per_page?: number } = {}
+): Promise<{ id: number; title: string; status: string; authorName: string; date: string }[]> {
+  try {
+    const response = await makeWordPressRequest(config, '/wp/v2/pages', {
+      method: 'get',
+      params: {
+        status: params.status || 'any',
+        per_page: params.per_page || 50,
+        _embed: 'author'
+      }
+    });
+
+    if (Array.isArray(response.data)) {
+      return response.data.map((page: any) => {
+        let authorName = 'Admin';
+        const embeddedAuthor = page._embedded?.author?.[0];
+        if (embeddedAuthor?.name) {
+          authorName = embeddedAuthor.name;
+        }
+        return {
+          id: page.id,
+          title: page.title?.rendered || 'Untitled',
+          status: page.status,
+          authorName,
+          date: page.date ? page.date.substring(0, 10) : ''
+        };
+      });
+    }
+    return [];
+  } catch (error: any) {
+    console.error(`[WordPress] Fetching pages failed:`, error.message);
+    throw new Error(error.response?.data?.message || error.message || 'Failed to fetch pages');
+  }
+}
+
+/**
+ * Updates an existing WordPress static page.
+ */
+export async function updateWordPressPage(
+  config: WordPressSiteConfig,
+  pageId: number,
+  payload: { title?: string; content?: string; meta?: any }
+): Promise<boolean> {
+  try {
+    await makeWordPressRequest(config, `/wp/v2/pages/${pageId}`, {
+      method: 'post',
+      data: payload,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return true;
+  } catch (error: any) {
+    console.error(`[WordPress] Updating page ${pageId} failed:`, error.message);
+    throw new Error(error.response?.data?.message || error.message || 'Failed to update page');
+  }
+}
+
