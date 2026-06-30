@@ -13,6 +13,11 @@ export function setupAutoUpdater(mainWindow: BrowserWindow) {
   }
   isInitialized = true;
 
+  // Prevent electron-updater from automatically using GH_TOKEN / GITHUB_TOKEN from the user's OS environment variables.
+  // This avoids triggering private update checks (which request releases/atom.xml) for this public repository.
+  delete process.env.GH_TOKEN;
+  delete process.env.GITHUB_TOKEN;
+
   // Configure logging
   autoUpdater.logger = console;
   
