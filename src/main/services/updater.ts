@@ -31,12 +31,12 @@ export function setupAutoUpdater(mainWindow: BrowserWindow) {
     });
   }, 5000);
 
-  // Periodically check for updates every 30 seconds
+  // Periodically check for updates every 1 hour (3600000 ms)
   setInterval(() => {
     autoUpdater.checkForUpdates().catch(err => {
       console.error('[Updater] Background periodic update check failed:', err.message);
     });
-  }, 30 * 1000); // 30 seconds in milliseconds
+  }, 60 * 60 * 1000); // 1 hour in milliseconds
 
   // Helper to send events to Renderer
   function sendUpdateStatus(channel: string, data: any = {}) {
@@ -68,7 +68,8 @@ export function setupAutoUpdater(mainWindow: BrowserWindow) {
 
   autoUpdater.on('update-downloaded', (info) => {
     sendUpdateStatus('updater-update-downloaded', info);
-    autoUpdater.quitAndInstall();
+    // DO NOT call autoUpdater.quitAndInstall() here.
+    // Let the user click the install button in the UI.
   });
 
   // 2. Hook IPC commands from Renderer

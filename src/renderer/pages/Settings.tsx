@@ -460,6 +460,19 @@ const Settings: React.FC = () => {
                     </div>
                   </div>
 
+                  <div className="space-y-1.5 mt-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-md">
+                    <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Required OAuth Callback URL</label>
+                    <p className="text-[10px] text-zinc-400">
+                      Copy and paste this exact URL into the <strong className="text-zinc-300">Authorized redirect URIs</strong> section of your Google Cloud Console credential:
+                    </p>
+                    <code className="text-xs text-indigo-300 font-mono block mt-1 p-2 bg-black/30 rounded select-all">
+                      http://127.0.0.1:8524/oauth-callback
+                    </code>
+                    <p className="text-[10px] text-zinc-400 mt-2">
+                      <strong className="text-zinc-300">Port Busy?</strong> If the default port is busy, we automatically try alternative ports (8525-8550). If you get a "Redirect URI mismatch" error during auth, either add the alternative port URI to Google Cloud, or (Recommended) select <strong>Desktop app</strong> as the Application type in Google Cloud which allows dynamic ports automatically.
+                    </p>
+                  </div>
+
                   <div className="flex items-center space-x-4 pt-1">
                     <Button 
                       type="button" 

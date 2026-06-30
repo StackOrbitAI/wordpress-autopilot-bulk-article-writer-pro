@@ -159,7 +159,8 @@ const Websites: React.FC = () => {
     }
 
     // Prepare authorization flow redirecting to the local express server
-    const successUrl = `http://127.0.0.1:4890/api/wordpress/callback?site_name=${encodeURIComponent(name.trim())}`;
+    const expressPort = await api.getExpressPort();
+    const successUrl = `http://127.0.0.1:${expressPort}/api/wordpress/callback?site_name=${encodeURIComponent(name.trim())}`;
     const authUrl = `${cleanedUrl}/wp-admin/authorize-application.php?app_name=${encodeURIComponent('StackOrbitAI Bulk Writer Pro')}&success_url=${encodeURIComponent(successUrl)}`;
 
     try {

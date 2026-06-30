@@ -12,6 +12,7 @@ const Topbar: React.FC<TopbarProps> = ({ activeTab, theme, setTheme }) => {
   const [updaterMessage, setUpdaterMessage] = useState<string>('');
   const [updaterType, setUpdaterType] = useState<'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error'>('idle');
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [apiPort, setApiPort] = useState<number | null>(null);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
   const [notifications, setNotifications] = useState<string[]>([
     'Welcome to StackOrbitAI Bulk Writer Pro!',
@@ -33,6 +34,11 @@ const Topbar: React.FC<TopbarProps> = ({ activeTab, theme, setTheme }) => {
     // Listen for updater events from preload
     const api = (window as any).api;
     if (!api) return;
+
+    // Fetch API Port
+    api.getExpressPort().then((port: number) => {
+      setApiPort(port);
+    }).catch(console.error);
 
     const unsubs = [
       api.onUpdaterEvent('updater-checking', () => {
@@ -126,7 +132,7 @@ const Topbar: React.FC<TopbarProps> = ({ activeTab, theme, setTheme }) => {
         {/* API Server Active Badge */}
         <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
           <Radio className="h-3.5 w-3.5 animate-pulse" />
-          <span>Local REST API Active (Port 4890)</span>
+          <span>Local REST API Active (Port {apiPort || '...'})</span>
         </div>
 
         {/* Update status actions */}

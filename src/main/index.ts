@@ -22,6 +22,7 @@ import { googleDocsService } from './services/googleDocs';
 import { startExpressServer, stopExpressServer } from './server';
 
 let mainWindow: BrowserWindow | null = null;
+let expressPort = 4890;
 
 function createWindow() {
   const isDev = process.env.NODE_ENV === 'development';
@@ -164,7 +165,7 @@ if (!gotTheLock) {
     }
 
     // Start Express API Server
-    await startExpressServer(4890, (siteData) => {
+    expressPort = await startExpressServer(4890, (siteData) => {
       if (mainWindow) {
         mainWindow.webContents.send('wordpress:auth-success', siteData);
       }
@@ -194,9 +195,14 @@ if (!gotTheLock) {
 
 // 2. Register IPC Handlers
 // App Utilities
+// App Utilities
 ipcMain.handle('app:openExternal', async (_event, url: string) => {
   await shell.openExternal(url);
   return { success: true };
+});
+
+ipcMain.handle('app:getExpressPort', async () => {
+  return expressPort;
 });
 
 ipcMain.handle('app:getVersion', () => {
@@ -337,6 +343,21 @@ ipcMain.handle('db:createTask', async (_event, taskData: any) => {
 
   const status = isScheduled ? 'scheduled' : 'draft';
 
+  // Deduplicate keywords case-insensitively and trim
+  const seen = new Set<string>();
+  const uniqueKws: string[] = [];
+  if (Array.isArray(keywords)) {
+    for (const kw of keywords) {
+      if (typeof kw === 'string') {
+        const trimmed = kw.trim();
+        if (trimmed && !seen.has(trimmed.toLowerCase())) {
+          seen.add(trimmed.toLowerCase());
+          uniqueKws.push(trimmed);
+        }
+      }
+    }
+  }
+
   const result = await dbRun(
     `INSERT INTO tasks (
       name, website_id, language, country, category, keywords,
@@ -346,7 +367,7 @@ ipcMain.handle('db:createTask', async (_event, taskData: any) => {
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       name, websiteId, language || 'en', country || 'us', category || 'General',
-      JSON.stringify(keywords), promptTemplate, providerId, model, imageGeneration !== undefined ? imageGeneration : 0,
+      JSON.stringify(uniqueKws), promptTemplate, providerId, model, imageGeneration !== undefined ? imageGeneration : 0,
       imageStyle || 'photorealistic', imageSize || '1200x628', articleLength || 'medium',
       publishingMode || 'draft', JSON.stringify(seoSettings || {}),
       JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2', publishTarget || 'wordpress',
@@ -357,7 +378,7 @@ ipcMain.handle('db:createTask', async (_event, taskData: any) => {
   const taskId = result.lastID;
 
   // Insert jobs for each keyword
-  for (const kw of keywords) {
+  for (const kw of uniqueKws) {
     await dbRun(
       `INSERT INTO jobs (task_id, keyword, status) VALUES (?, ?, 'waiting')`,
       [taskId, kw]
@@ -379,6 +400,23 @@ ipcMain.handle('db:duplicateTask', async (_event, id: number) => {
   if (!original) throw new Error('Task to duplicate not found');
 
   const newName = `${original.name} (Copy)`;
+
+  // Deduplicate keywords case-insensitively
+  const origKeywords = JSON.parse(original.keywords || '[]');
+  const seen = new Set<string>();
+  const uniqueKws: string[] = [];
+  if (Array.isArray(origKeywords)) {
+    for (const kw of origKeywords) {
+      if (typeof kw === 'string') {
+        const trimmed = kw.trim();
+        if (trimmed && !seen.has(trimmed.toLowerCase())) {
+          seen.add(trimmed.toLowerCase());
+          uniqueKws.push(trimmed);
+        }
+      }
+    }
+  }
+
   const result = await dbRun(
     `INSERT INTO tasks (
       name, website_id, language, country, category, keywords,
@@ -388,7 +426,7 @@ ipcMain.handle('db:duplicateTask', async (_event, id: number) => {
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
     [
       newName, original.website_id, original.language, original.country, original.category,
-      original.keywords, original.prompt_template, original.provider_id, original.model,
+      JSON.stringify(uniqueKws), original.prompt_template, original.provider_id, original.model,
       original.image_generation, original.image_style, original.image_size, original.article_length,
       original.publishing_mode, original.seo_settings, original.schedule_settings, 
       original.image_model || 'gpt-image-2', original.publish_target || 'wordpress',
@@ -397,9 +435,8 @@ ipcMain.handle('db:duplicateTask', async (_event, id: number) => {
   );
 
   const newTaskId = result.lastID;
-  const keywords = JSON.parse(original.keywords || '[]');
   
-  for (const kw of keywords) {
+  for (const kw of uniqueKws) {
     await dbRun(
       `INSERT INTO jobs (task_id, keyword, status) VALUES (?, ?, 'waiting')`,
       [newTaskId, kw]
@@ -461,6 +498,21 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
     seoSettings, scheduleSettings, isScheduled, status, imageModel, publishTarget, insertInlineImages
   } = taskData;
 
+  // Deduplicate keywords case-insensitively and trim
+  const seen = new Set<string>();
+  const uniqueKws: string[] = [];
+  if (Array.isArray(keywords)) {
+    for (const kw of keywords) {
+      if (typeof kw === 'string') {
+        const trimmed = kw.trim();
+        if (trimmed && !seen.has(trimmed.toLowerCase())) {
+          seen.add(trimmed.toLowerCase());
+          uniqueKws.push(trimmed);
+        }
+      }
+    }
+  }
+
   await dbRun(
     `UPDATE tasks SET 
       name = ?, website_id = ?, language = ?, country = ?, category = ?, 
@@ -471,7 +523,7 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
      WHERE id = ?`,
     [
       name, websiteId, language, country, category, 
-      JSON.stringify(keywords), promptTemplate, providerId, model, 
+      JSON.stringify(uniqueKws), promptTemplate, providerId, model, 
       imageGeneration !== undefined ? imageGeneration : 0, imageStyle, imageSize, articleLength, 
       publishingMode, JSON.stringify(seoSettings || {}), 
       JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2', publishTarget || 'wordpress',
@@ -481,24 +533,24 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
 
   // Sync keyword jobs
   const currentJobs = await dbAll(`SELECT id, keyword, status FROM jobs WHERE task_id = ?`, [id]);
-  const currentKeywords = currentJobs.map(j => j.keyword);
-  const newKeywordsSet = new Set(keywords);
-
-  // Delete jobs that are no longer present and are waiting/skipped/failed
+  
+  // Delete jobs that are no longer present (case-insensitively) and are waiting/skipped/failed
+  const uniqueNewKwsSet = new Set(uniqueKws.map(k => k.toLowerCase()));
   for (const job of currentJobs) {
-    if (!newKeywordsSet.has(job.keyword) && (job.status === 'waiting' || job.status === 'skipped' || job.status === 'failed')) {
+    if (!uniqueNewKwsSet.has(job.keyword.toLowerCase()) && (job.status === 'waiting' || job.status === 'skipped' || job.status === 'failed')) {
       await dbRun(`DELETE FROM jobs WHERE id = ?`, [job.id]);
     }
   }
 
   // Insert new jobs
-  const currentKeywordsSet = new Set(currentKeywords);
-  for (const kw of keywords) {
-    if (!currentKeywordsSet.has(kw)) {
+  const currentJobsKwsSet = new Set(currentJobs.map(j => j.keyword.toLowerCase()));
+  for (const kw of uniqueKws) {
+    if (!currentJobsKwsSet.has(kw.toLowerCase())) {
       await dbRun(
         `INSERT INTO jobs (task_id, keyword, status) VALUES (?, ?, 'waiting')`,
         [id, kw]
       );
+      currentJobsKwsSet.add(kw.toLowerCase());
     }
   }
 

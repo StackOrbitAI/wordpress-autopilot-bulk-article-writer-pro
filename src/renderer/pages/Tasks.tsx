@@ -37,6 +37,15 @@ interface TasksProps {
   onNavigate: (tab: string, arg?: any) => void;
 }
 
+const uniqueKeywords = (prev: string[], next: string[]) => {
+  const map = new Map<string, string>();
+  for (const k of prev) map.set(k.toLowerCase(), k);
+  for (const k of next) {
+    if (!map.has(k.toLowerCase())) map.set(k.toLowerCase(), k);
+  }
+  return Array.from(map.values());
+};
+
 const NEW_DEFAULT_PROMPT = `Write an in-depth, captivating, and well-researched blog post of 2,000–3,000 words on {keyword}. The content should be written in a natural, human tone, engaging the reader through storytelling, personal anecdotes, and clear examples.
 
 Ensure the post is rich in value, covering every aspect of the topic from different perspectives, offering expert insights, analysis, and actionable advice. While writing, naturally incorporate strong E-E-A-T principles by demonstrating real-life experience, expert-backed insights, credible research support, and trustworthy guidance that aligns with Google's quality standards. The writing should flow seamlessly, with easy-to-follow subheadings, bullet points, and unique markdown formatting to enhance readability, without Separator in paragraph.
@@ -439,7 +448,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
       reader.onload = (event) => {
         const text = event.target?.result as string;
         const list = text.split('\n').map(k => k.trim()).filter(k => k.length > 0);
-        setKeywords(prev => Array.from(new Set([...prev, ...list])));
+        setKeywords(prev => uniqueKeywords(prev, list));
       };
       reader.readAsText(file);
     } else if (fileExt === 'csv') {
@@ -448,7 +457,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
         skipEmptyLines: true,
         complete: (results) => {
           const list = results.data.flat().map((k: any) => k.toString().trim()).filter(k => k.length > 0);
-          setKeywords(prev => Array.from(new Set([...prev, ...list])));
+          setKeywords(prev => uniqueKeywords(prev, list));
         }
       });
     } else if (fileExt === 'xlsx' || fileExt === 'xls') {
@@ -460,7 +469,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         const list = json.flat().map((k: any) => k?.toString().trim()).filter(k => k && k.length > 0);
-        setKeywords(prev => Array.from(new Set([...prev, ...list])));
+        setKeywords(prev => uniqueKeywords(prev, list));
       };
       reader.readAsArrayBuffer(file);
     }
@@ -472,7 +481,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
       .split('\n')
       .map(k => k.trim())
       .filter(k => k.length > 0);
-    setKeywords(prev => Array.from(new Set([...prev, ...list])));
+    setKeywords(prev => uniqueKeywords(prev, list));
     setKeywordsText('');
   };
 

@@ -333,7 +333,7 @@ export async function generateFeaturedImage(
   const enhancedPrompt = `A high quality, high resolution, detailed ${style} image depicting: ${prompt}. No text, no logos, no watermarks, realistic lighting, professional composition.`;
 
   // 1. Runware AI Generation Check
-  if (imageModel.toLowerCase().startsWith('runware') || imageModel.toLowerCase().startsWith('civitai')) {
+  if (imageModel.toLowerCase().startsWith('runware') || imageModel.toLowerCase().startsWith('civitai') || imageModel.toLowerCase().startsWith('cblas')) {
     const rwKeySetting = await dbGet(`SELECT value FROM settings WHERE key = 'runware_api_key'`);
     const rwKey = rwKeySetting?.value || '';
     if (!rwKey) {

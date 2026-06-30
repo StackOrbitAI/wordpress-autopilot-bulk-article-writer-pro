@@ -22,26 +22,9 @@ class GoogleDocsService {
   public startOAuthFlow(
     clientId: string,
     clientSecret: string
-  ): Promise<{ authUrl: string; getTokens: () => Promise<string> }> {
+  ): Promise<{ authUrl: string; getTokens: () => Promise<string>, redirectUri: string }> {
     return new Promise((resolve, reject) => {
-      const port = 8524;
-      const redirectUri = `http://localhost:${port}/oauth-callback`;
-
-      const oauth2Client = new google.auth.OAuth2(
-        clientId,
-        clientSecret,
-        redirectUri
-      );
-
-      const authUrl = oauth2Client.generateAuthUrl({
-        access_type: 'offline',
-        prompt: 'consent',
-        scope: [
-          'https://www.googleapis.com/auth/documents',
-          'https://www.googleapis.com/auth/drive.file',
-          'https://www.googleapis.com/auth/spreadsheets'
-        ]
-      });
+      let port = 8524;
 
       // If a local server is already running, close it
       if (this.localServer) {
@@ -81,9 +64,40 @@ class GoogleDocsService {
         }
       });
 
-      this.localServer.listen(port, () => {
+      this.localServer.on('error', (err: any) => {
+        if (err.code === 'EADDRINUSE') {
+          console.warn(`[Google OAuth] Port ${port} is busy, trying ${port + 1}...`);
+          port++;
+          if (port > 8550) {
+            reject(new Error('No available ports found for OAuth callback (tried 8524-8550).'));
+          } else {
+            this.localServer?.listen(port, '127.0.0.1');
+          }
+        } else {
+          reject(err);
+        }
+      });
+
+      this.localServer.on('listening', () => {
         console.log(`[Google OAuth] Local server listening on callback port: ${port}`);
         
+        const redirectUri = `http://127.0.0.1:${port}/oauth-callback`;
+        const oauth2Client = new google.auth.OAuth2(
+          clientId,
+          clientSecret,
+          redirectUri
+        );
+
+        const authUrl = oauth2Client.generateAuthUrl({
+          access_type: 'offline',
+          prompt: 'consent',
+          scope: [
+            'https://www.googleapis.com/auth/documents',
+            'https://www.googleapis.com/auth/drive.file',
+            'https://www.googleapis.com/auth/spreadsheets'
+          ]
+        });
+
         // Expose a helper to exchange the code for tokens once received
         const getTokens = async () => {
           const code = await authCodePromise;
@@ -96,12 +110,10 @@ class GoogleDocsService {
           return tokens.refresh_token;
         };
 
-        resolve({ authUrl, getTokens });
+        resolve({ authUrl, getTokens, redirectUri });
       });
 
-      this.localServer.on('error', (err) => {
-        reject(err);
-      });
+      this.localServer.listen(port, '127.0.0.1');
     });
   }
 
@@ -142,7 +154,7 @@ class GoogleDocsService {
       const oauth2Client = new google.auth.OAuth2(
         config.clientId,
         config.clientSecret,
-        'http://localhost:8524/oauth-callback'
+        'http://127.0.0.1:8524/oauth-callback'
       );
       oauth2Client.setCredentials({
         refresh_token: config.refreshToken

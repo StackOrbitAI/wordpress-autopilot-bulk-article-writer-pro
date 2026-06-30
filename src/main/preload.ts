@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener(channel, listener);
   },
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  getExpressPort: () => ipcRenderer.invoke('app:getExpressPort'),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   onWordPressAuthSuccess: (callback: (data: any) => void) => {
     const listener = (_event: any, data: any) => callback(data);

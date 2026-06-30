@@ -283,31 +283,43 @@ app.get('/api/wordpress/callback', async (req, res) => {
   }
 });
 
-export function startExpressServer(port: number = 4890, onWordPressCallback?: (siteData: any) => void): Promise<number> {
-  return new Promise((resolve) => {
+export function startExpressServer(initialPort: number = 4890, onWordPressCallback?: (siteData: any) => void): Promise<number> {
+  return new Promise((resolve, reject) => {
     wpCallback = onWordPressCallback || null;
     if (serverInstance) {
-      return resolve(port);
+      const address = serverInstance.address();
+      if (typeof address === 'object' && address !== null) {
+        return resolve(address.port);
+      }
+      return resolve(initialPort);
     }
-    try {
-      const server = app.listen(port, () => {
+
+    let port = initialPort;
+    const tryListen = () => {
+      const server = app.listen(port, '127.0.0.1', () => {
         console.log(`[Express Server] Local API server listening on http://127.0.0.1:${port}`);
         serverInstance = server;
         resolve(port);
       });
 
       server.on('error', (err: any) => {
-        console.error('[Express Server] Server error:', err.message);
         if (err.code === 'EADDRINUSE') {
-          console.warn(`[Express Server] Port ${port} is already in use. Proceeding without starting a new server instance.`);
-          // If port is in use, we resolve successfully so the app doesn't crash.
-          resolve(port);
+          console.warn(`[Express Server] Port ${port} is busy, trying ${port + 1}...`);
+          port++;
+          if (port > 4950) {
+            console.error('[Express Server] No available ports found.');
+            reject(new Error('No available ports found for Express server.'));
+          } else {
+            tryListen();
+          }
+        } else {
+          console.error('[Express Server] Server error:', err.message);
+          reject(err);
         }
       });
-    } catch (err: any) {
-      console.error('[Express Server] Exception during server listen:', err.message);
-      resolve(port);
-    }
+    };
+
+    tryListen();
   });
 }
 

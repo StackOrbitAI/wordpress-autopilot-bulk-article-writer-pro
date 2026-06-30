@@ -291,21 +291,17 @@ class QueueManager {
 
     if (initialMode === 1) { // DALL-E
       modesToTry.push({ mode: 1, isAI: true, model: parsedModel, style: parsedStyle });
-      modesToTry.push({ mode: 100, isAI: true, model: 'runware:100', style: parsedStyle });
+      modesToTry.push({ mode: 100, isAI: true, model: 'cblas-flux-1-schnell', style: parsedStyle });
       modesToTry.push({ mode: 101, isAI: true, model: 'imagen-3.0-generate-002', style: parsedStyle });
       modesToTry.push({ mode: 3, isAI: false }); // Unsplash
       modesToTry.push({ mode: 2, isAI: false }); // Pexels
       modesToTry.push({ mode: 4, isAI: false }); // Pixabay
     } else if (initialMode === 100) { // Runware
       modesToTry.push({ mode: 100, isAI: true, model: parsedModel, style: parsedStyle });
-      modesToTry.push({ mode: 1, isAI: true, model: 'gpt-image-2', style: parsedStyle });
-      modesToTry.push({ mode: 101, isAI: true, model: 'imagen-3.0-generate-002', style: parsedStyle });
-      modesToTry.push({ mode: 2, isAI: false }); // Pexels
-      modesToTry.push({ mode: 3, isAI: false }); // Unsplash
-      modesToTry.push({ mode: 4, isAI: false }); // Pixabay
+      // As requested, no fallback for Runware
     } else if (initialMode === 101) { // Gemini Imagen
       modesToTry.push({ mode: 101, isAI: true, model: parsedModel, style: parsedStyle });
-      modesToTry.push({ mode: 100, isAI: true, model: 'runware:100', style: parsedStyle });
+      modesToTry.push({ mode: 100, isAI: true, model: 'cblas-flux-1-schnell', style: parsedStyle });
       modesToTry.push({ mode: 1, isAI: true, model: 'gpt-image-2', style: parsedStyle });
       modesToTry.push({ mode: 4, isAI: false }); // Pixabay
       modesToTry.push({ mode: 3, isAI: false }); // Unsplash
@@ -315,6 +311,7 @@ class QueueManager {
       modesToTry.push({ mode: 3, isAI: false });
       modesToTry.push({ mode: 2, isAI: false });
       modesToTry.push({ mode: 4, isAI: false });
+      modesToTry.push({ mode: 100, isAI: true, model: 'cblas-flux-1-schnell', style: parsedStyle });
     }
 
     for (const attempt of modesToTry) {
@@ -323,7 +320,7 @@ class QueueManager {
           let imgKeyConfig = aiConfig;
           const targetModel = attempt.model || 'gpt-image-2';
           
-          if (targetModel.startsWith('runware') || targetModel.startsWith('civitai')) {
+          if (targetModel.startsWith('runware') || targetModel.startsWith('civitai') || targetModel.startsWith('cblas')) {
             const rwKeySetting = await dbGet(`SELECT value FROM settings WHERE key = 'runware_api_key'`);
             const rwKey = rwKeySetting?.value || '';
             if (!rwKey) continue;
