@@ -36,47 +36,11 @@ const Settings: React.FC = () => {
   const [googleClientSecret, setGoogleClientSecret] = useState('');
   const [googleRefreshToken, setGoogleRefreshToken] = useState('');
   const [googleServiceAccountJson, setGoogleServiceAccountJson] = useState('');
-  const [googleFolderId, setGoogleFolderId] = useState('');
-  const [googleSharingPermissions, setGoogleSharingPermissions] = useState('private');
-
   const [testingGoogle, setTestingGoogle] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<string | null>(null);
   const [googleAuthLoading, setGoogleAuthLoading] = useState(false);
 
-  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
-  const [openFolderPicker, setOpenFolderPicker] = useState(false);
 
-  const handleOpenFolderPicker = async () => {
-    const api = (window as any).api;
-    if (!api) return;
-    
-    setLoadingFolders(true);
-    setOpenFolderPicker(true);
-    
-    try {
-      const config = {
-        authType: googleAuthType,
-        clientId: googleClientId,
-        clientSecret: googleClientSecret,
-        refreshToken: googleRefreshToken,
-        serviceAccountJson: googleServiceAccountJson
-      };
-      
-      const res = await api.listGoogleFolders(config);
-      if (res.success && res.folders) {
-        setFolders(res.folders);
-      } else {
-        alert(`Failed to list folders: ${res.error || 'Check credentials'}`);
-        setOpenFolderPicker(false);
-      }
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
-      setOpenFolderPicker(false);
-    } finally {
-      setLoadingFolders(false);
-    }
-  };
 
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -105,8 +69,6 @@ const Settings: React.FC = () => {
         if (settings.google_client_secret) setGoogleClientSecret(settings.google_client_secret);
         if (settings.google_refresh_token) setGoogleRefreshToken(settings.google_refresh_token);
         if (settings.google_service_account_json) setGoogleServiceAccountJson(settings.google_service_account_json);
-        if (settings.google_target_folder_id) setGoogleFolderId(settings.google_target_folder_id);
-        if (settings.google_sharing_permissions) setGoogleSharingPermissions(settings.google_sharing_permissions);
       } catch (err) {
         console.error(err);
       }
@@ -161,9 +123,7 @@ const Settings: React.FC = () => {
         clientId: googleClientId,
         clientSecret: googleClientSecret,
         refreshToken: googleRefreshToken,
-        serviceAccountJson: googleServiceAccountJson,
-        folderId: googleFolderId,
-        sharingMode: googleSharingPermissions
+        serviceAccountJson: googleServiceAccountJson
       };
       const res = await api.testGoogleConnection(config);
       if (res.success) {
@@ -201,8 +161,6 @@ const Settings: React.FC = () => {
       await api.updateSetting('google_client_secret', googleClientSecret);
       await api.updateSetting('google_refresh_token', googleRefreshToken);
       await api.updateSetting('google_service_account_json', googleServiceAccountJson);
-      await api.updateSetting('google_target_folder_id', googleFolderId);
-      await api.updateSetting('google_sharing_permissions', googleSharingPermissions);
 
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -507,53 +465,7 @@ const Settings: React.FC = () => {
                 </div>
               )}
 
-              <div className="border-t border-zinc-800/40 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Target Drive Folder ID (Optional)</label>
-                  <div className="flex space-x-2">
-                    <Input 
-                      type="text" 
-                      value={googleFolderId} 
-                      onChange={(e) => setGoogleFolderId(e.target.value)} 
-                      placeholder="Enter Folder ID (e.g. 1a2b3c...)" 
-                      className="bg-zinc-950 border-zinc-800 font-mono text-xs flex-1"
-                    />
-                    <Button
-                      type="button"
-                      onClick={handleOpenFolderPicker}
-                      className="bg-zinc-900 border border-zinc-800 text-zinc-305 hover:bg-zinc-800 text-xs font-semibold px-3 h-9"
-                    >
-                      Browse
-                    </Button>
-                  </div>
-                  <p className="text-[9px] text-zinc-500">
-                    If using a service account, you must share this Google Drive folder with the service account email.
-                  </p>
-                </div>
 
-                <div className="space-y-1.5 self-end pb-1">
-                  <Button 
-                    type="button" 
-                    onClick={handleTestGoogle}
-                    disabled={testingGoogle}
-                    className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 w-full text-xs font-semibold h-9"
-                  >
-                    {testingGoogle ? 'Testing...' : 'Test Connection'}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-1.5 border-t border-zinc-800/40 pt-4">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Link Sharing & Access Permissions</label>
-                <Select value={googleSharingPermissions} onChange={(e) => setGoogleSharingPermissions(e.target.value)}>
-                  <option value="private">Private (Only Creator has access)</option>
-                  <option value="view">Anyone with Link can View (Public Link)</option>
-                  <option value="edit">Anyone with Link can Edit (Public Collaborator)</option>
-                </Select>
-                <p className="text-[9px] text-zinc-500">
-                  Controls the link access levels applied automatically when documents and spreadsheets are generated.
-                </p>
-              </div>
 
               {googleStatus && (
                 <div className="p-3 bg-zinc-900/40 border border-zinc-850 rounded-lg text-xs font-mono text-zinc-450">
@@ -632,62 +544,6 @@ const Settings: React.FC = () => {
         </div>
       </form>
 
-      {/* Folder Picker Modal */}
-      {openFolderPicker && (
-        <Dialog open={openFolderPicker} onOpenChange={() => setOpenFolderPicker(false)}>
-          <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto bg-zinc-950 border border-zinc-800 text-zinc-350" onClose={() => setOpenFolderPicker(false)}>
-            <DialogHeader className="border-b border-zinc-800 pb-3">
-              <DialogTitle className="text-zinc-105 flex items-center text-zinc-100 font-bold">
-                <Globe className="h-4 w-4 text-indigo-400 mr-2" />
-                Select Google Drive Target Folder
-              </DialogTitle>
-              <DialogDescription className="text-xs text-zinc-500 mt-1">
-                Browse folders from your authenticated Google Drive to choose target publishing directory.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="py-4 space-y-2">
-              {loadingFolders ? (
-                <p className="text-zinc-500 text-xs py-10 text-center animate-pulse">Scanning Google Drive folders...</p>
-              ) : folders.length === 0 ? (
-                <div className="py-8 text-center space-y-2">
-                  <p className="text-zinc-500 text-xs italic">No folders found in Google Drive.</p>
-                  <p className="text-[10px] text-zinc-500 px-4 leading-relaxed">
-                    Note: If you are using a Service Account, you must share your Google Drive folder(s) with the Service Account email address first (listed in your JSON key or settings).
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
-                  {folders.map(f => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => {
-                        setGoogleFolderId(f.id);
-                        setOpenFolderPicker(false);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all bg-zinc-900/40 border border-zinc-850 hover:border-indigo-500/30 hover:bg-zinc-900 text-zinc-300 hover:text-zinc-100 flex items-center justify-between"
-                    >
-                      <span>{f.name}</span>
-                      <span className="text-[9px] font-mono text-zinc-600 truncate max-w-[150px]">{f.id}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end pt-3 border-t border-zinc-800/40">
-              <Button
-                type="button"
-                onClick={() => setOpenFolderPicker(false)}
-                className="bg-zinc-850 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold h-8"
-              >
-                Close Explorer
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 };

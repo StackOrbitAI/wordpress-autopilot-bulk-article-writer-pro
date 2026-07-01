@@ -134,6 +134,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
 
   // Google Folder Picker States
   const [googleFolderId, setGoogleFolderId] = useState('');
+  const [googleSharingPermissions, setGoogleSharingPermissions] = useState('private');
   const [openFolderPicker, setOpenFolderPicker] = useState(false);
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
@@ -386,6 +387,8 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
         setScheduleDate(draft.scheduleDate || '');
         setScheduleTime(draft.scheduleTime || '');
         setScheduleFrequency(draft.scheduleFrequency || 'once');
+        setGoogleFolderId(draft.googleFolderId || '');
+        setGoogleSharingPermissions(draft.googleSharingPermissions || 'private');
         setStep(draft.step || 1);
         if (draft.editingTaskId) {
           setEditingTaskId(draft.editingTaskId);
@@ -405,7 +408,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
         promptTemplate, providerId, model, imageGeneration, imageStyle,
         imageSize, articleLength, publishingMode, seoPlugin, isScheduled,
         scheduleDate, scheduleTime, scheduleFrequency, step, editingTaskId,
-        publishTargetWp, publishTargetGoogle
+        publishTargetWp, publishTargetGoogle, googleFolderId, googleSharingPermissions
       };
       localStorage.setItem('task_wizard_draft', JSON.stringify(draft));
     }, 10000);
@@ -632,6 +635,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
     setEditingTaskId(task.id);
     setName(task.name);
     setGoogleFolderId(task.google_folder_id || '');
+    setGoogleSharingPermissions(task.google_sharing_permissions || 'private');
     setWebsiteId(task.website_id.toString());
     const isWp = !task.publish_target || task.publish_target.includes('wordpress');
     const isGoogle = !!(task.publish_target && task.publish_target.includes('googledocs'));
@@ -725,6 +729,7 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
     setStep(1);
     setName('');
     setGoogleFolderId('');
+    setGoogleSharingPermissions('private');
     setCategoryQuery('');
     setKeywords([]);
     setScheduleDate('');
@@ -972,7 +977,8 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
       scheduleSettings,
       isScheduled,
       publishTarget,
-      googleFolderId
+      googleFolderId,
+      googleSharingPermissions
     };
 
     try {
@@ -1098,27 +1104,41 @@ const Tasks: React.FC<TasksProps> = ({ onNavigate }) => {
             </div>
 
             {publishTargetGoogle && (
-              <div className="space-y-1.5 bg-zinc-900/30 border border-zinc-800 p-3 rounded-lg">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Target Google Drive Folder (Optional)</label>
-                <div className="flex space-x-2">
-                  <Input 
-                    type="text" 
-                    value={googleFolderId} 
-                    onChange={(e) => setGoogleFolderId(e.target.value)} 
-                    placeholder="Enter Folder ID (e.g. 1a2b3c...)" 
-                    className="bg-zinc-950 border-zinc-800 font-mono text-xs flex-1"
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleOpenFolderPicker}
-                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-xs font-semibold px-3 h-9"
-                  >
-                    Browse
-                  </Button>
+              <div className="bg-zinc-900/30 border border-zinc-800 p-4 rounded-xl space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Target Google Drive Folder (Optional)</label>
+                  <div className="flex space-x-2">
+                    <Input 
+                      type="text" 
+                      value={googleFolderId} 
+                      onChange={(e) => setGoogleFolderId(e.target.value)} 
+                      placeholder="Enter Folder ID (e.g. 1a2b3c...)" 
+                      className="bg-zinc-950 border-zinc-800 font-mono text-xs flex-1"
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleOpenFolderPicker}
+                      className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-xs font-semibold px-3 h-9"
+                    >
+                      Browse
+                    </Button>
+                  </div>
+                  <p className="text-[9px] text-zinc-500">
+                    Select a specific Drive folder to store generated documents. Defaults to root folder if empty.
+                  </p>
                 </div>
-                <p className="text-[9px] text-zinc-500">
-                  Select a specific Drive folder to store generated documents. Defaults to the folder in Global Settings if empty.
-                </p>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Link Sharing & Access Permissions</label>
+                  <Select value={googleSharingPermissions} onChange={(e) => setGoogleSharingPermissions(e.target.value)}>
+                    <option value="private">Private (Only Creator has access)</option>
+                    <option value="view">Anyone with Link can View (Public Link)</option>
+                    <option value="edit">Anyone with Link can Edit (Public Collaborator)</option>
+                  </Select>
+                  <p className="text-[9px] text-zinc-500">
+                    Controls the link access levels applied automatically when documents and spreadsheets are generated for this task.
+                  </p>
+                </div>
               </div>
             )}
 

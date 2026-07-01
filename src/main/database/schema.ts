@@ -54,6 +54,7 @@ export const SCHEMA_TABLES = [
     publish_target TEXT DEFAULT 'wordpress',
     google_sheet_url TEXT,
     google_folder_id TEXT,
+    google_sharing_permissions TEXT DEFAULT 'private',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(website_id) REFERENCES websites(id),

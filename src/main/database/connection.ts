@@ -198,6 +198,16 @@ async function runMigrations(): Promise<void> {
       console.warn('[Database] Migration warning (adding insert_inline_images column):', err.message);
     }
   }
+
+  // Custom migration for google_sharing_permissions column in tasks table
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN google_sharing_permissions TEXT DEFAULT 'private'`);
+    console.log('[Database] Migration: Added google_sharing_permissions column to tasks table successfully.');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name') && !err.message.includes('already exists')) {
+      console.warn('[Database] Migration warning (adding google_sharing_permissions column):', err.message);
+    }
+  }
 }
 
 // Close database connection

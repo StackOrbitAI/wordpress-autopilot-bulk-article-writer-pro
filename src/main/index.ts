@@ -339,7 +339,7 @@ ipcMain.handle('db:createTask', async (_event, taskData: any) => {
     promptTemplate, providerId, model, imageGeneration,
     imageStyle, imageSize, articleLength, publishingMode,
     seoSettings, scheduleSettings, isScheduled, imageModel, publishTarget, insertInlineImages,
-    googleFolderId
+    googleFolderId, googleSharingPermissions
   } = taskData;
 
   const status = isScheduled ? 'scheduled' : 'draft';
@@ -365,15 +365,15 @@ ipcMain.handle('db:createTask', async (_event, taskData: any) => {
       prompt_template, provider_id, model, image_generation,
       image_style, image_size, article_length, publishing_mode,
       seo_settings, schedule_settings, status, image_model, publish_target, insert_inline_images,
-      google_folder_id
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      google_folder_id, google_sharing_permissions
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       name, websiteId, language || 'en', country || 'us', category || 'General',
       JSON.stringify(uniqueKws), promptTemplate, providerId, model, imageGeneration !== undefined ? imageGeneration : 0,
       imageStyle || 'photorealistic', imageSize || '1200x628', articleLength || 'medium',
       publishingMode || 'draft', JSON.stringify(seoSettings || {}),
       JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2', publishTarget || 'wordpress',
-      insertInlineImages ? 1 : 0, googleFolderId || null
+      insertInlineImages ? 1 : 0, googleFolderId || null, googleSharingPermissions || 'private'
     ]
   );
 
@@ -425,8 +425,8 @@ ipcMain.handle('db:duplicateTask', async (_event, id: number) => {
       prompt_template, provider_id, model, image_generation,
       image_style, image_size, article_length, publishing_mode,
       seo_settings, schedule_settings, status, image_model, publish_target, insert_inline_images,
-      google_folder_id
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+      google_folder_id, google_sharing_permissions
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?)`,
     [
       newName, original.website_id, original.language, original.country, original.category,
       JSON.stringify(uniqueKws), original.prompt_template, original.provider_id, original.model,
@@ -434,7 +434,7 @@ ipcMain.handle('db:duplicateTask', async (_event, id: number) => {
       original.publishing_mode, original.seo_settings, original.schedule_settings, 
       original.image_model || 'gpt-image-2', original.publish_target || 'wordpress',
       original.insert_inline_images !== undefined ? original.insert_inline_images : 0,
-      original.google_folder_id || null
+      original.google_folder_id || null, original.google_sharing_permissions || 'private'
     ]
   );
 
@@ -500,7 +500,7 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
     promptTemplate, providerId, model, imageGeneration,
     imageStyle, imageSize, articleLength, publishingMode,
     seoSettings, scheduleSettings, isScheduled, status, imageModel, publishTarget, insertInlineImages,
-    googleFolderId
+    googleFolderId, googleSharingPermissions
   } = taskData;
 
   // Deduplicate keywords case-insensitively and trim
@@ -524,7 +524,8 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
       keywords = ?, prompt_template = ?, provider_id = ?, model = ?, 
       image_generation = ?, image_style = ?, image_size = ?, article_length = ?, 
       publishing_mode = ?, seo_settings = ?, schedule_settings = ?, status = ?,
-      image_model = ?, publish_target = ?, insert_inline_images = ?, google_folder_id = ?, updated_at = CURRENT_TIMESTAMP
+      image_model = ?, publish_target = ?, insert_inline_images = ?, google_folder_id = ?, 
+      google_sharing_permissions = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
     [
       name, websiteId, language, country, category, 
@@ -532,7 +533,7 @@ ipcMain.handle('db:updateTask', async (_event, id: number, taskData: any) => {
       imageGeneration !== undefined ? imageGeneration : 0, imageStyle, imageSize, articleLength, 
       publishingMode, JSON.stringify(seoSettings || {}), 
       JSON.stringify(scheduleSettings || {}), status, imageModel || 'gpt-image-2', publishTarget || 'wordpress',
-      insertInlineImages ? 1 : 0, googleFolderId || null, id
+      insertInlineImages ? 1 : 0, googleFolderId || null, googleSharingPermissions || 'private', id
     ]
   );
 

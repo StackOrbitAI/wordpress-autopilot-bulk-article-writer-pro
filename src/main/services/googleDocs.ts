@@ -207,7 +207,9 @@ class GoogleDocsService {
       q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
       pageSize: 100,
       fields: 'files(id, name)',
-      orderBy: 'name'
+      orderBy: 'name',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
     });
 
     const files = response.data.files || [];

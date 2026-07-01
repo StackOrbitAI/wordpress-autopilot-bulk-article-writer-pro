@@ -200,7 +200,7 @@ class QueueManager {
         `SELECT j.*, t.provider_id, t.model, t.website_id, t.language, t.country, t.category, 
                 t.prompt_template, t.image_generation, t.image_style, t.image_size, t.image_model, 
                 t.insert_inline_images, t.article_length, t.publishing_mode, t.seo_settings, 
-                t.publish_target, t.google_sheet_url, t.google_folder_id, t.name AS task_name
+                t.publish_target, t.google_sheet_url, t.google_folder_id, t.google_sharing_permissions, t.name AS task_name
          FROM jobs j
          JOIN tasks t ON j.task_id = t.id
          WHERE j.status = 'waiting' AND t.status = 'running' AND t.id IN (${placeHolders})
@@ -525,7 +525,7 @@ class QueueManager {
           refreshToken: googleSettings.google_refresh_token,
           serviceAccountJson: googleSettings.google_service_account_json,
           folderId: job.google_folder_id || googleSettings.google_target_folder_id,
-          sharingMode: googleSettings.google_sharing_permissions || 'private'
+          sharingMode: job.google_sharing_permissions || googleSettings.google_sharing_permissions || 'private'
         };
       }
 
