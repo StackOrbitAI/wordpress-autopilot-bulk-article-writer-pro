@@ -77,6 +77,72 @@ StackOrbitAI Bulk Blog Writer/
 
 ---
 
+## 📥 Download & Installation Guide (Windows, macOS, Linux)
+
+You can download the pre-built installers for Windows, macOS, and Linux directly from the **[GitHub Releases](https://github.com/StackOrbitAI/stackorbitai-wordpress-autopilot-bulk-article-seo-writer-pro-with-ai-agents/releases)** page.
+
+### 🌐 Quick Download Links
+* **Windows (.exe)**: [Download Latest Windows Setup](https://github.com/StackOrbitAI/stackorbitai-wordpress-autopilot-bulk-article-seo-writer-pro-with-ai-agents/releases/latest) (Select `stackorbitai-bulk-writer-pro-Setup-[version]-[arch].exe`)
+* **macOS (.dmg)**: [Download Latest macOS DMG](https://github.com/StackOrbitAI/stackorbitai-wordpress-autopilot-bulk-article-seo-writer-pro-with-ai-agents/releases/latest) (Select `stackorbitai-bulk-writer-pro-[version]-arm64.dmg` for Apple Silicon or `stackorbitai-bulk-writer-pro-[version]-x64.dmg` for Intel Macs)
+* **Linux (.AppImage / .deb)**: [Download Latest Linux Package](https://github.com/StackOrbitAI/stackorbitai-wordpress-autopilot-bulk-article-seo-writer-pro-with-ai-agents/releases/latest) (Select `stackorbitai-bulk-writer-pro-[version].AppImage` or `stackorbitai-bulk-writer-pro_[version]_[arch].deb`)
+
+---
+
+### 🪟 Windows Installation Guide
+1. **Download**: Click the Windows setup link above and download the `.exe` file (typically `stackorbitai-bulk-writer-pro-Setup-[version]-x64.exe`).
+2. **Install**: Double-click the downloaded `.exe` file to run the installer.
+3. **SmartScreen Bypass** (if prompted):
+   * Since this is a newly released app, Windows SmartScreen may show a warning saying *"Windows protected your PC"*.
+   * Click **More info**.
+   * Click **Run anyway** to proceed.
+4. **Launch**: The installer will place a shortcut on your Desktop and Start Menu. Run **StackOrbitAI Bulk Writer Pro** from there.
+
+---
+
+### 🍎 macOS Installation & Security Setup
+1. **Download**: Download the `.dmg` installer for your system architecture:
+   * **`-arm64.dmg`** if you are using an Apple Silicon Mac (M1, M2, M3, M4, etc.).
+   * **`-x64.dmg`** if you are using an Intel Mac.
+2. **Install**: Double-click the downloaded `.dmg` file. **Drag and drop** the `StackOrbitAI Bulk Writer Pro` icon directly into your **Applications** folder.
+   > [!IMPORTANT]
+   > Do not run the app directly from the mounted DMG volume. Running it from `/Applications` is required for auto-updates and local SQLite database read/write access.
+3. **Bypass Gatekeeper "Developer Cannot Be Verified" warning**:
+   * Open **Finder** and navigate to your **Applications** folder.
+   * **Right-click** (or Control-click) the `StackOrbitAI Bulk Writer Pro` app icon and choose **Open**.
+   * A popup warning will appear. Click **Open** to confirm. macOS will save this exception, allowing the app to open by double-clicking in the future.
+   * *Alternative terminal bypass*: Open Terminal and run:
+     ```bash
+     xattr -d com.apple.quarantine "/Applications/StackOrbitAI Bulk Writer Pro.app"
+     ```
+
+---
+
+### 🐧 Linux Installation Guide
+
+We provide both a portable **AppImage** and a **Debian/Ubuntu (.deb)** package.
+
+#### Method A: AppImage (Recommended)
+1. **Download**: Grab the `.AppImage` file from the releases list.
+2. **Make Executable**:
+   * **GUI**: Right-click the `.AppImage` file -> Properties -> Permissions -> Check "Allow executing file as program".
+   * **Terminal**: Open a terminal in the folder containing your downloaded file and run:
+     ```bash
+     chmod +x stackorbitai-bulk-writer-pro-*.AppImage
+     ```
+3. **Run**: Double-click the `.AppImage` file to launch the application.
+
+#### Method B: Debian/Ubuntu Package (.deb)
+1. **Download**: Grab the `.deb` package file.
+2. **Install**:
+   * Double-click the `.deb` file to open it in your Software Center, then click **Install**.
+   * Or run the following command in terminal:
+     ```bash
+     sudo dpkg -i stackorbitai-bulk-writer-pro_*.deb
+     sudo apt-get install -f # Resolve any potential dependency issues
+     ```
+
+---
+
 ## 🔧 Installation & Local Setup
 
 ### Prerequisites
@@ -108,28 +174,6 @@ npm run package:win
 npm run package:mac
 ```
 Packaged installer output files will be created in the `release/` directory.
-
----
-
-## 🍎 macOS Installation & Security Setup (Gatekeeper Bypass)
-
-Since the app is not signed/notarized with an official Apple Developer account, macOS Gatekeeper will block it from launching or auto-updating by default. Follow these instructions to run the application:
-
-### 1. Drag the App to Applications Folder
-* Download the `.dmg` installer for your architecture.
-* Open the `.dmg` and **drag** the `StackOrbitAI Bulk Writer Pro` app icon directly into your `/Applications` folder.
-* **Important**: Do not run the app directly from the mounted DMG volume, as this makes it read-only and prevents auto-updates from working.
-
-### 2. Bypass Gatekeeper "Developer Cannot Be Verified" Warning
-* Open Finder, navigate to the **Applications** folder.
-* **Right-click (or Control-click)** the `StackOrbitAI Bulk Writer Pro` app icon and choose **Open**.
-* A popup warning will appear. Click **Open** to confirm. macOS will save this exception, allowing the app to open by double-clicking in the future.
-
-### 3. Bypass via Terminal (Alternative)
-* Open the **Terminal** app on your Mac and execute the following command:
-  ```bash
-  xattr -d com.apple.quarantine "/Applications/StackOrbitAI Bulk Writer Pro.app"
-  ```
 
 ---
 
